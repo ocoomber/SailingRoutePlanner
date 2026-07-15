@@ -28,7 +28,7 @@ export function calculateRoute(params) {
   log.push(`Wind grid times: ${windGrid.grid.length} hours`);
   log.push(`---`);
 
-  let isochrone = [{ point: start, heading: null, parent: null, time: departureTime, sog: 0, twa: 0, windSpeed: 0, windDir: 0 }];
+  let isochrone = [{ point: start, heading: null, parent: null, time: departureTime, sog: 0, twa: 0, windSpeed: 0, windDir: 0, distToEnd: totalDist }];
   const history = [isochrone];
 
   const maxSteps = 500;
