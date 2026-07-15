@@ -4,7 +4,7 @@ import { calculateRoute } from '../core/router.js';
 import { fetchWindGrid } from '../services/wind.js';
 import { initMap, setStart, setEnd, drawRoute, clearAll } from './map.js';
 import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
-import { showResults, showError, hideResults, showLoading, hideLoading } from './results.js';
+import { showResults, showError, hideResults, showLoading, hideLoading, showLog, hideLog } from './results.js';
 
 let polars = null;
 let coastline = null;
@@ -53,6 +53,7 @@ async function onCalculate() {
   }
 
   hideResults();
+  hideLog();
   showLoading();
 
   try {
@@ -87,7 +88,7 @@ async function onCalculate() {
 
     const tidalCurrent = inputs.tidalEnabled ? parseTidalData(inputs.tidalData) : null;
 
-    const legs = calculateRoute({
+    const { route, log } = calculateRoute({
       start,
       end,
       departureTime: departureISO,
@@ -100,19 +101,20 @@ async function onCalculate() {
     });
 
     hideLoading();
+    showLog(log);
 
-    if (!legs || legs.length === 0) {
-      showError('No route found. Try adjusting your waypoints or time.');
+    if (!route || route.length === 0) {
+      showError('No route found. See debug log below.');
       return;
     }
 
-    const totalTime = legs.reduce((sum, l) => sum + l.duration, 0);
+    const totalTime = route.reduce((sum, l) => sum + l.duration, 0);
     const computedDeparture = inputs.timeMode === 'arrival'
       ? new Date(arrivalTime.getTime() - totalTime * 3600000)
       : null;
 
-    drawRoute(legs);
-    showResults(legs, totalTime, inputs.timeMode, computedDeparture, targetTime);
+    drawRoute(route);
+    showResults(route, totalTime, inputs.timeMode, computedDeparture, targetTime);
   } catch (err) {
     hideLoading();
     showError(err.message);
@@ -123,6 +125,7 @@ async function onCalculate() {
 function onClear() {
   clearAll();
   hideResults();
+  hideLog();
   document.getElementById('start-lat').value = '';
   document.getElementById('start-lon').value = '';
   document.getElementById('end-lat').value = '';

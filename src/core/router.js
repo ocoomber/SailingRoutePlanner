@@ -15,10 +15,25 @@ export function calculateRoute(params) {
   const timeStepHours = timeStepMinutes / 60;
   const totalDist = distanceNm(start, end);
 
+  const log = [];
+  log.push(`=== ROUTE CALCULATION LOG ===`);
+  log.push(`Start: ${start.lat.toFixed(4)}, ${start.lon.toFixed(4)}`);
+  log.push(`End: ${end.lat.toFixed(4)}, ${end.lon.toFixed(4)}`);
+  log.push(`Total distance: ${totalDist.toFixed(1)} NM`);
+  log.push(`Departure: ${departureTime}`);
+  log.push(`Time step: ${timeStepMinutes} min`);
+  log.push(`Heading threshold: ${headingThreshold}°`);
+  log.push(`Coastline segments: ${coastline.segments.length}`);
+  log.push(`Wind grid points: ${windGrid.points.length}`);
+  log.push(`Wind grid times: ${windGrid.grid.length} hours`);
+  log.push(`---`);
+
   let isochrone = [{ point: start, heading: null, parent: null, time: departureTime }];
   const history = [isochrone];
 
   const maxSteps = 500;
+  let landBlocked = 0;
+  let zeroSpeed = 0;
 
   for (let step = 0; step < maxSteps; step++) {
     const nextIsochrone = [];
@@ -30,7 +45,10 @@ export function calculateRoute(params) {
         const twa = ((raw % 360) + 540) % 360 - 180;
         const boatSpeed = lookupSpeed(polars, Math.abs(twa), wind.speed);
 
-        if (boatSpeed <= 0) continue;
+        if (boatSpeed <= 0) {
+          zeroSpeed++;
+          continue;
+        }
 
         let moveVector = { direction: h, speed: boatSpeed };
 
@@ -42,7 +60,13 @@ export function calculateRoute(params) {
         const distNm = moveVector.speed * timeStepHours;
         const newPoint = destination(node.point, moveVector.direction, distNm);
 
-        if (crossesLand(coastline, node.point, newPoint)) continue;
+        if (crossesLand(coastline, node.point, newPoint)) {
+          landBlocked++;
+          if (step < 3) {
+            log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);
+          }
+          continue;
+        }
 
         const distToEnd = distanceNm(newPoint, end);
 
@@ -56,7 +80,10 @@ export function calculateRoute(params) {
       }
     }
 
-    if (nextIsochrone.length === 0) break;
+    if (nextIsochrone.length === 0) {
+      log.push(`[Step ${step}] Isochrone collapsed — no valid moves`);
+      break;
+    }
 
     nextIsochrone.sort((a, b) => a.distToEnd - b.distToEnd);
 
@@ -65,13 +92,37 @@ export function calculateRoute(params) {
     isochrone = pruned;
 
     const closest = isochrone[0];
+
+    if (step % 5 === 0 || closest.distToEnd < 2) {
+      log.push(`[Step ${step}] Best: ${closest.point.lat.toFixed(4)},${closest.point.lon.toFixed(4)} dist ${closest.distToEnd.toFixed(1)}NM candidates ${nextIsochrone.length}→${pruned.length}`);
+    }
+
     const arrivalThreshold = Math.max(0.5, totalDist * 0.02);
     if (closest.distToEnd < arrivalThreshold) {
-      return buildRoute(closest, history, headingThreshold);
+      log.push(`[Step ${step}] ROUTE FOUND — within ${arrivalThreshold.toFixed(1)}NM of destination`);
+      log.push(`---`);
+      log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
+      const route = buildRoute(closest, history, headingThreshold);
+      log.push(`Legs: ${route.length}`);
+      for (let i = 0; i < route.length; i++) {
+        const leg = route[i];
+        const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
+        log.push(`  Leg ${i + 1}: ${leg.heading}°T → ${leg.waypoint.lat.toFixed(4)}°N ${Math.abs(leg.waypoint.lon).toFixed(4)}°${lonDir} (${leg.duration.toFixed(1)}h)`);
+      }
+      return { route, log: log.join('\n') };
     }
   }
 
-  return null;
+  log.push(`---`);
+  log.push(`NO ROUTE FOUND after ${maxSteps} steps`);
+  log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
+  const lastIso = isochrone;
+  if (lastIso.length > 0) {
+    const best = lastIso[0];
+    log.push(`Best position reached: ${best.point.lat.toFixed(4)},${best.point.lon.toFixed(4)} (${best.distToEnd.toFixed(1)}NM from destination)`);
+  }
+
+  return { route: null, log: log.join('\n') };
 }
 
 function pruneIsochrone(points, minDistNm) {

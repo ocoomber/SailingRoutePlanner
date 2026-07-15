@@ -97,3 +97,14 @@ export function hideLoading() {
   const overlay = document.getElementById('loading-overlay');
   if (overlay) overlay.remove();
 }
+
+export function showLog(logText) {
+  const panel = document.getElementById('debug-log');
+  const pre = document.getElementById('debug-log-content');
+  panel.classList.remove('hidden');
+  pre.textContent = logText;
+}
+
+export function hideLog() {
+  document.getElementById('debug-log').classList.add('hidden');
+}
