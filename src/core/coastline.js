@@ -1,4 +1,4 @@
-import { segmentsCross, pointInPolygon } from './geometry.js';
+import { segmentsCross } from './geometry.js';
 
 export function loadCoastline(geojson) {
   const segments = [];
@@ -64,15 +64,6 @@ export function crossesLand(coastline, a, b) {
   for (const seg of coastline.segments) {
     if (segmentsCross(a, b, seg[0], seg[1])) {
       return true;
-    }
-  }
-
-  if (coastline.polygons) {
-    const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
-    for (const polygon of coastline.polygons) {
-      if (!pointInPolygon(mid, polygon)) return true;
-      if (!pointInPolygon(a, polygon)) return true;
-      if (!pointInPolygon(b, polygon)) return true;
     }
   }
 
