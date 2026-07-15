@@ -6,7 +6,8 @@ export function getInputs() {
     startLon: parseFloat(document.getElementById('start-lon').value),
     endLat: parseFloat(document.getElementById('end-lat').value),
     endLon: parseFloat(document.getElementById('end-lon').value),
-    departure: document.getElementById('departure').value,
+    departureDate: document.getElementById('departure-date').value,
+    departureTime: document.getElementById('departure-time').value,
     timeMode: document.querySelector('input[name="time-mode"]:checked').value,
     timeStep: parseInt(document.getElementById('time-step').value, 10),
     headingThreshold: parseInt(document.getElementById('heading-threshold').value, 10),
@@ -50,8 +51,8 @@ export function validateInputs(inputs) {
     }
   }
 
-  if (!inputs.departure) {
-    errors.push('Target time is required');
+  if (!inputs.departureDate || !inputs.departureTime) {
+    errors.push('Target date and time are required');
   }
 
   if (inputs.timeStep < 5 || inputs.timeStep > 60) {

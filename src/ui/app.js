@@ -66,7 +66,7 @@ async function onCalculate() {
       west: Math.min(start.lon, end.lon) - 0.5
     };
 
-    const targetTime = new Date(inputs.departure);
+    const targetTime = new Date(`${inputs.departureDate}T${inputs.departureTime}:00Z`);
 
     let departureTime;
     let arrivalTime;
@@ -138,8 +138,10 @@ async function init() {
   document.getElementById('clear-btn').addEventListener('click', onClear);
 
   const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  document.getElementById('departure').value = now.toISOString().slice(0, 16);
+  const dateStr = now.toISOString().slice(0, 10);
+  const timeStr = now.toISOString().slice(11, 16);
+  document.getElementById('departure-date').value = dateStr;
+  document.getElementById('departure-time').value = timeStr;
 
   try {
     await loadData();
