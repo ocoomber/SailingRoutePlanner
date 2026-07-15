@@ -10,7 +10,7 @@
 <body>
   <header>
     <h1>Sailing Passage Planner</h1>
-    <p class="subtitle">Phase 1 — Pre-departure planning for SW England waters — <span class="build-number">Build 1 — 2026-07-15 20:06 UTC</span></p>
+    <p class="subtitle">Phase 1 — Pre-departure planning for SW England waters — <span class="build-number">Build 2 — 2026-07-15 20:10 UTC</span></p>
   </header>
 
   <main>
@@ -48,8 +48,12 @@
             <label for="mode-arrival">Target arrival</label>
           </div>
           <div class="input-row">
-            <label for="departure">Date &amp; Time</label>
-            <input type="datetime-local" id="departure">
+            <label for="departure-date">Date (UTC)</label>
+            <input type="date" id="departure-date">
+          </div>
+          <div class="input-row">
+            <label for="departure-time">Time (UTC)</label>
+            <input type="time" id="departure-time" step="900">
           </div>
           <p class="hint" id="time-hint">When you plan to leave</p>
           <p class="hint">Times are in UTC</p>
