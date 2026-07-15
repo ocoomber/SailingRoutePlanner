@@ -111,7 +111,7 @@ export function calculateRoute(params) {
       for (let i = 0; i < route.length; i++) {
         const leg = route[i];
         const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
-        log.push(`  Leg ${i + 1}: ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.distance.toFixed(1)}NM ${leg.duration.toFixed(1)}h ${leg.windDescription}`);
+        log.push(`  Leg ${i + 1}: ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.distance.toFixed(1)}NM ${leg.duration.toFixed(1)}h wind ${leg.windSpeed}kn from ${leg.windDir}° ${leg.windDescription}`);
       }
       return { route, log: log.join('\n') };
     }
@@ -166,12 +166,13 @@ function simplifyLegs(path, threshold) {
   if (firstRealIdx >= path.length) return [];
 
   const legs = [];
-  let legStart = path[firstRealIdx];
+  let legStart = path[0];
   let lastHeading = path[firstRealIdx].heading;
   let totalSog = path[firstRealIdx].sog;
   let sogCount = 1;
   let totalTwa = path[firstRealIdx].twa;
   let totalWindSpeed = path[firstRealIdx].windSpeed;
+  let totalWindDir = path[firstRealIdx].windDir;
   let windCount = 1;
   let prevTwaSign = Math.sign(path[firstRealIdx].twa);
 
@@ -185,6 +186,7 @@ function simplifyLegs(path, threshold) {
       const avgSog = totalSog / sogCount;
       const avgTwa = totalTwa / windCount;
       const avgWindSpeed = totalWindSpeed / windCount;
+      const avgWindDir = totalWindDir / windCount;
 
       legs.push({
         heading: Math.round(lastHeading),
@@ -195,6 +197,7 @@ function simplifyLegs(path, threshold) {
         sog: avgSog,
         windAngle: Math.round(Math.abs(avgTwa)),
         windSpeed: Math.round(avgWindSpeed),
+        windDir: Math.round(avgWindDir),
         windDescription: describeWind(avgTwa),
         maneuver: null
       });
@@ -223,6 +226,7 @@ function simplifyLegs(path, threshold) {
       sogCount++;
       totalTwa += path[i].twa;
       totalWindSpeed += path[i].windSpeed;
+      totalWindDir += path[i].windDir;
       windCount++;
     }
   }
@@ -233,6 +237,7 @@ function simplifyLegs(path, threshold) {
   const avgSog = totalSog / sogCount;
   const avgTwa = totalTwa / windCount;
   const avgWindSpeed = totalWindSpeed / windCount;
+  const avgWindDir = totalWindDir / windCount;
 
   legs.push({
     heading: Math.round(lastHeading),
@@ -243,6 +248,7 @@ function simplifyLegs(path, threshold) {
     sog: avgSog,
     windAngle: Math.round(Math.abs(avgTwa)),
     windSpeed: Math.round(avgWindSpeed),
+    windDir: Math.round(avgWindDir),
     windDescription: describeWind(avgTwa),
     maneuver: null
   });

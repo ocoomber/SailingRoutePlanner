@@ -3,6 +3,7 @@ let startMarker = null;
 let endMarker = null;
 let routePolyline = null;
 let legMarkers = [];
+let windArrows = [];
 let placing = 'start';
 let onPointSelected = null;
 
@@ -69,6 +70,7 @@ export function setEnd(lat, lon) {
 export function drawRoute(legs) {
   if (routePolyline) map.removeLayer(routePolyline);
   clearLegMarkers();
+  clearWindArrows();
 
   if (!legs || legs.length === 0) return;
 
@@ -111,6 +113,7 @@ export function drawRoute(legs) {
     opacity: 0.8
   }).addTo(map);
 
+  drawWindArrows(legs);
   map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
 }
 
@@ -121,12 +124,55 @@ function clearLegMarkers() {
   legMarkers = [];
 }
 
+function drawWindArrows(legs) {
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+    if (!leg.windDir && leg.windDir !== 0) continue;
+
+    const midLat = (leg.waypoint.lat + leg.endWaypoint.lat) / 2;
+    const midLon = (leg.waypoint.lon + leg.endWaypoint.lon) / 2;
+
+    const arrowLen = 0.05;
+    const windRad = (leg.windDir + 180) * Math.PI / 180;
+    const tipLat = midLat + arrowLen * Math.cos(windRad);
+    const tipLon = midLon + arrowLen * Math.sin(windRad);
+
+    const line = L.polyline(
+      [[midLat, midLon], [tipLat, tipLon]],
+      { color: '#6b21a8', weight: 2, opacity: 0.8 }
+    ).addTo(map);
+
+    const headLen = 0.012;
+    const headAng1 = windRad + 2.6;
+    const headAng2 = windRad - 2.6;
+    const head1 = [tipLat + headLen * Math.cos(headAng1), tipLon + headLen * Math.sin(headAng1)];
+    const head2 = [tipLat + headLen * Math.cos(headAng2), tipLon + headLen * Math.sin(headAng2)];
+
+    const head = L.polyline([head1, [tipLat, tipLon], head2], {
+      color: '#6b21a8', weight: 2, opacity: 0.8
+    }).addTo(map);
+
+    const label = `${leg.windSpeed}kn ${leg.windDir}\u00B0`;
+    line.bindTooltip(label, { permanent: false, direction: 'top' });
+
+    windArrows.push(line, head);
+  }
+}
+
+function clearWindArrows() {
+  for (const m of windArrows) {
+    map.removeLayer(m);
+  }
+  windArrows = [];
+}
+
 export function clearRoute() {
   if (routePolyline) {
     map.removeLayer(routePolyline);
     routePolyline = null;
   }
   clearLegMarkers();
+  clearWindArrows();
 }
 
 export function clearAll() {
