@@ -10,12 +10,12 @@
 <body>
   <header>
     <h1>Sailing Passage Planner</h1>
-    <p class="subtitle">Phase 1 — Pre-departure planning for SW England waters — <span class="build-number">Build 5 — 2026-07-15 20:28 UTC</span></p>
+    <p class="subtitle">Phase 1 — Pre-departure planning for SW England waters — <span class="build-number">Build 6 — 2026-07-15 20:31 UTC</span></p>
   </header>
 
   <main>
     <div class="app-layout">
-      <aside class="controls-panel">
+      <aside class="panel controls-panel">
         <section class="control-group">
           <h2>Route</h2>
           <div class="input-row">
@@ -87,9 +87,11 @@
         <button id="clear-btn" class="secondary-btn">Clear</button>
       </aside>
 
-      <div class="map-and-results">
+      <div class="panel map-panel">
         <div id="map"></div>
+      </div>
 
+      <aside class="panel results-panel">
         <div id="results" class="hidden">
           <h2>Passage Plan</h2>
           <div id="route-summary"></div>
@@ -98,10 +100,10 @@
         </div>
 
         <div id="debug-log" class="hidden">
-          <h2>Debug Log <span class="hint">(copy this to paste back for troubleshooting)</span></h2>
+          <h2>Debug Log <span class="hint">(copy to paste back for troubleshooting)</span></h2>
           <pre id="debug-log-content"></pre>
         </div>
-      </div>
+      </aside>
     </div>
   </main>
 
