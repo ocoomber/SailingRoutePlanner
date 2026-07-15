@@ -247,6 +247,37 @@ textarea {
   font-size: 0.8rem;
 }
 
+#debug-log {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+}
+
+#debug-log h2 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+#debug-log .hint {
+  font-weight: normal;
+  font-size: 0.75rem;
+}
+
+#debug-log pre {
+  background: #1a1a2e;
+  color: #e2e8f0;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
 footer {
   padding: 0.75rem 1.5rem;
 }
