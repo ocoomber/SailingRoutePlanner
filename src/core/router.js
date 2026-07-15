@@ -173,6 +173,7 @@ function simplifyLegs(path, threshold) {
   let totalTwa = path[firstRealIdx].twa;
   let totalWindSpeed = path[firstRealIdx].windSpeed;
   let windCount = 1;
+  let prevTwaSign = Math.sign(path[firstRealIdx].twa);
 
   for (let i = firstRealIdx + 1; i < path.length; i++) {
     const headingDiff = Math.abs(normalizeAngle(path[i].heading - lastHeading));
@@ -194,8 +195,19 @@ function simplifyLegs(path, threshold) {
         sog: avgSog,
         windAngle: Math.round(Math.abs(avgTwa)),
         windSpeed: Math.round(avgWindSpeed),
-        windDescription: describeWind(avgTwa)
+        windDescription: describeWind(avgTwa),
+        maneuver: null
       });
+
+      const newTwaSign = Math.sign(path[i].twa);
+      if (prevTwaSign !== 0 && newTwaSign !== 0 && prevTwaSign !== newTwaSign) {
+        const absAvgTwa = Math.abs(avgTwa);
+        const isTack = absAvgTwa > 90;
+        const maneuver = isTack ? 'tack' : 'gybe';
+        if (legs.length >= 2) {
+          legs[legs.length - 1].maneuver = maneuver;
+        }
+      }
 
       legStart = path[i - 1];
       lastHeading = path[i].heading;
@@ -204,6 +216,7 @@ function simplifyLegs(path, threshold) {
       totalTwa = path[i].twa;
       totalWindSpeed = path[i].windSpeed;
       windCount = 1;
+      prevTwaSign = newTwaSign;
     } else {
       lastHeading = path[i].heading;
       totalSog += path[i].sog;
@@ -230,7 +243,8 @@ function simplifyLegs(path, threshold) {
     sog: avgSog,
     windAngle: Math.round(Math.abs(avgTwa)),
     windSpeed: Math.round(avgWindSpeed),
-    windDescription: describeWind(avgTwa)
+    windDescription: describeWind(avgTwa),
+    maneuver: null
   });
 
   return legs;

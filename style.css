@@ -241,10 +241,41 @@ textarea {
   margin-bottom: 0.4rem;
 }
 
+.leg-tack {
+  border-left: 3px solid #2563eb;
+  background: #eff6ff;
+}
+
+.leg-gybe {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+}
+
 .leg-header {
   font-weight: 600;
   margin-bottom: 0.2rem;
   font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.leg-maneuver-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+}
+
+.badge-tack {
+  background: #2563eb;
+  color: white;
+}
+
+.badge-gybe {
+  background: #f59e0b;
+  color: white;
 }
 
 .leg-details {
