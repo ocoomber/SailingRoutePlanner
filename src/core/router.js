@@ -60,7 +60,7 @@ export function calculateRoute(params) {
         const distNm = moveVector.speed * timeStepHours;
         const newPoint = destination(node.point, moveVector.direction, distNm);
 
-        if (crossesLand(coastline, node.point, newPoint)) {
+        if (crossesLand(coastline, node.point, newPoint, start)) {
           landBlocked++;
           if (step < 3) {
             log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);
