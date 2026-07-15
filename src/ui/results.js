@@ -77,7 +77,7 @@ export function showResults(legs, totalTime, timeMode, computedDeparture, target
       { label: 'Distance', value: `${leg.distance.toFixed(1)} NM` },
       { label: 'SoG', value: `${leg.sog.toFixed(1)} kn` },
       { label: 'Time', value: formatDuration(leg.duration) },
-      { label: 'Wind', value: `${leg.windSpeed} kn TWA ${leg.windAngle}\u00B0` },
+      { label: 'Wind', value: `${leg.windSpeed} kn from ${leg.windDir}\u00B0 TWA ${leg.windAngle}\u00B0` },
       { label: 'Point of sail', value: leg.windDescription }
     ];
 
