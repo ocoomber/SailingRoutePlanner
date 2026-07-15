@@ -43,12 +43,30 @@ export function showResults(legs, totalTime, timeMode, computedDeparture, target
     const li = document.createElement('li');
     li.className = 'leg-item';
 
+    if (leg.maneuver) {
+      li.classList.add(`leg-${leg.maneuver}`);
+    }
+
     const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
     const endLonDir = leg.endWaypoint.lon < 0 ? 'W' : 'E';
 
     const headerDiv = document.createElement('div');
     headerDiv.className = 'leg-header';
-    headerDiv.textContent = `Leg ${i + 1}: ${leg.heading}\u00B0T`;
+
+    const maneuverSpan = document.createElement('span');
+    maneuverSpan.className = 'leg-maneuver-badge';
+    if (leg.maneuver === 'tack') {
+      maneuverSpan.textContent = 'TACK';
+      maneuverSpan.classList.add('badge-tack');
+    } else if (leg.maneuver === 'gybe') {
+      maneuverSpan.textContent = 'GYBE';
+      maneuverSpan.classList.add('badge-gybe');
+    }
+
+    headerDiv.textContent = `Leg ${i + 1}: ${leg.heading}\u00B0T `;
+    if (leg.maneuver) {
+      headerDiv.appendChild(maneuverSpan);
+    }
 
     const detailsDiv = document.createElement('div');
     detailsDiv.className = 'leg-details';

@@ -2,6 +2,7 @@ let map = null;
 let startMarker = null;
 let endMarker = null;
 let routePolyline = null;
+let legMarkers = [];
 let placing = 'start';
 let onPointSelected = null;
 
@@ -67,17 +68,41 @@ export function setEnd(lat, lon) {
 
 export function drawRoute(legs) {
   if (routePolyline) map.removeLayer(routePolyline);
+  clearLegMarkers();
 
   if (!legs || legs.length === 0) return;
 
   const points = [];
-  for (const leg of legs) {
-    points.push([leg.waypoint.lat, leg.waypoint.lon]);
-  }
-
   if (startMarker) {
     const ll = startMarker.getLatLng();
-    points.unshift([ll.lat, ll.lng]);
+    points.push([ll.lat, ll.lng]);
+  }
+
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+    points.push([leg.waypoint.lat, leg.waypoint.lon]);
+
+    const isTack = leg.maneuver === 'tack';
+    const isGybe = leg.maneuver === 'gybe';
+
+    let color = '#1a6fb5';
+    let fillColor = '#3b82f6';
+    if (isTack) { color = '#1d4ed8'; fillColor = '#2563eb'; }
+    if (isGybe) { color = '#b45309'; fillColor = '#f59e0b'; }
+
+    const marker = L.circleMarker([leg.waypoint.lat, leg.waypoint.lon], {
+      radius: 5,
+      color,
+      fillColor,
+      fillOpacity: 0.9,
+      weight: 2
+    }).addTo(map);
+
+    const label = `Leg ${i + 1}: ${leg.heading}\u00B0T`;
+    const extra = isTack ? ' [TACK]' : isGybe ? ' [GYBE]' : '';
+    marker.bindTooltip(label + extra, { permanent: false });
+
+    legMarkers.push(marker);
   }
 
   routePolyline = L.polyline(points, {
@@ -89,11 +114,19 @@ export function drawRoute(legs) {
   map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
 }
 
+function clearLegMarkers() {
+  for (const m of legMarkers) {
+    map.removeLayer(m);
+  }
+  legMarkers = [];
+}
+
 export function clearRoute() {
   if (routePolyline) {
     map.removeLayer(routePolyline);
     routePolyline = null;
   }
+  clearLegMarkers();
 }
 
 export function clearAll() {
