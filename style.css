@@ -67,8 +67,7 @@ main {
 .app-layout {
   display: flex;
   gap: 1rem;
-  height: calc(100vh - 10rem);
-  max-height: 700px;
+  height: calc(100vh - 8rem);
 }
 
 .controls-panel {
