@@ -5,6 +5,7 @@ export function getInputs() {
     endLat: parseFloat(document.getElementById('end-lat').value),
     endLon: parseFloat(document.getElementById('end-lon').value),
     departure: document.getElementById('departure').value,
+    timeMode: document.querySelector('input[name="time-mode"]:checked').value,
     timeStep: parseInt(document.getElementById('time-step').value, 10),
     headingThreshold: parseInt(document.getElementById('heading-threshold').value, 10),
     tidalEnabled: document.getElementById('enable-tides').checked,
@@ -32,13 +33,28 @@ export function validateInputs(inputs) {
     errors.push('End coordinates are required');
   }
   if (!inputs.departure) {
-    errors.push('Departure time is required');
+    errors.push('Target time is required');
   }
   if (inputs.timeStep < 5 || inputs.timeStep > 60) {
     errors.push('Time step must be between 5 and 60 minutes');
   }
 
   return errors;
+}
+
+export function setupTimeModeToggle() {
+  const radios = document.querySelectorAll('input[name="time-mode"]');
+  const hint = document.getElementById('time-hint');
+
+  const update = () => {
+    const mode = document.querySelector('input[name="time-mode"]:checked').value;
+    hint.textContent = mode === 'departure'
+      ? 'When you plan to leave'
+      : 'When you want to arrive — departure time will be computed';
+  };
+
+  radios.forEach(r => r.addEventListener('change', update));
+  update();
 }
 
 export function parseTidalData(text) {

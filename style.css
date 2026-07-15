@@ -114,7 +114,12 @@ textarea:focus {
   outline-offset: -1px;
 }
 
-.checkbox-row {
+.checkbox-row,
+.radio-row {
+  min-width: unset;
+}
+
+.radio-row label {
   min-width: unset;
 }
 

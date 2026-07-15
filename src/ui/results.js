@@ -1,4 +1,14 @@
-export function showResults(legs, totalTime) {
+function formatTime(date) {
+  return date.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+}
+
+function formatDuration(hours) {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+export function showResults(legs, totalTime, timeMode, computedDeparture, targetTime) {
   const results = document.getElementById('results');
   const summary = document.getElementById('route-summary');
   const warnings = document.getElementById('route-warnings');
@@ -6,9 +16,15 @@ export function showResults(legs, totalTime) {
 
   results.classList.remove('hidden');
 
-  const hours = Math.floor(totalTime);
-  const mins = Math.round((totalTime - hours) * 60);
-  summary.textContent = `${legs.length} legs, approximately ${hours}h ${mins}m total`;
+  let summaryText = `${legs.length} legs, approximately ${formatDuration(totalTime)} sailing`;
+
+  if (timeMode === 'arrival' && computedDeparture) {
+    summaryText += `. To arrive by ${formatTime(targetTime)}, leave by ${formatTime(computedDeparture)}`;
+  } else {
+    summaryText += `. Departing ${formatTime(targetTime)}`;
+  }
+
+  summary.textContent = summaryText;
 
   warnings.innerHTML = `
     <strong>Warnings:</strong> Tidal stream not modelled. This plan is based on
@@ -22,15 +38,13 @@ export function showResults(legs, totalTime) {
     const leg = legs[i];
     const li = document.createElement('li');
 
-    const legHours = Math.floor(leg.duration);
-    const legMins = Math.round((leg.duration - legHours) * 60);
-    const durationStr = legHours > 0 ? `${legHours}h ${legMins}m` : `${legMins}m`;
+    const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
 
     li.innerHTML = `
       <span class="leg-heading">Leg ${i + 1}: ${leg.heading}°T</span>
       <span class="leg-detail">
-        → ${leg.waypoint.lat.toFixed(4)}°N, ${Math.abs(leg.waypoint.lon).toFixed(4)}°W
-        (${durationStr})
+        → ${leg.waypoint.lat.toFixed(4)}°N, ${Math.abs(leg.waypoint.lon).toFixed(4)}°${lonDir}
+        (${formatDuration(leg.duration)})
       </span>
     `;
 
