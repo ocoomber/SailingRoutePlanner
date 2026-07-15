@@ -1,86 +1,112 @@
 import { segmentsCross, pointInPolygon, distanceNm, interpolatePoint } from './geometry.js';
 
-export function loadCoastline(geojson) {
-  const segments = [];
-  const polygons = [];
+const CELL_SIZE = 0.1;
 
-  for (const feature of geojson.features) {
-    extractSegments(feature.geometry, segments);
-    extractPolygons(feature.geometry, polygons);
+export function loadCoastline(data) {
+  const grid = {};
+  for (const seg of data.segments) {
+    const a = seg.a;
+    const b = seg.b;
+    const cx = Math.floor((a.lon + b.lon) / 2 / CELL_SIZE) * CELL_SIZE;
+    const cy = Math.floor((a.lat + b.lat) / 2 / CELL_SIZE) * CELL_SIZE;
+    const key = cx.toFixed(3) + ',' + cy.toFixed(3);
+    if (!grid[key]) grid[key] = [];
+    grid[key].push([a, b]);
   }
-
-  return { segments, polygons };
+  data.grid = grid;
+  return data;
 }
 
-function extractSegments(geometry, segments) {
-  if (geometry.type === 'Polygon') {
-    addRingSegments(geometry.coordinates[0], segments);
-  } else if (geometry.type === 'MultiPolygon') {
-    for (const polygon of geometry.coordinates) {
-      addRingSegments(polygon[0], segments);
-    }
-  } else if (geometry.type === 'LineString') {
-    addLineSegments(geometry.coordinates, segments);
-  } else if (geometry.type === 'MultiLineString') {
-    for (const line of geometry.coordinates) {
-      addLineSegments(line, segments);
+function nearCells(pt) {
+  const cells = [];
+  const cx = Math.floor(pt.lon / CELL_SIZE) * CELL_SIZE;
+  const cy = Math.floor(pt.lat / CELL_SIZE) * CELL_SIZE;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      cells.push((cx + dx * CELL_SIZE).toFixed(3) + ',' + (cy + dy * CELL_SIZE).toFixed(3));
     }
   }
+  return cells;
 }
 
-function extractPolygons(geometry, polygons) {
-  if (geometry.type === 'Polygon') {
-    for (const ring of geometry.coordinates) {
-      polygons.push(ring.map(c => ({ lat: c[1], lon: c[0] })));
+function nearestNm(point, grid) {
+  let min = Infinity;
+  for (const key of nearCells(point)) {
+    const segs = grid[key];
+    if (!segs) continue;
+    for (const seg of segs) {
+      const d = distanceNm(point, seg[0]);
+      if (d < min) min = d;
     }
-  } else if (geometry.type === 'MultiPolygon') {
-    for (const polygon of geometry.coordinates) {
-      for (const ring of polygon) {
-        polygons.push(ring.map(c => ({ lat: c[1], lon: c[0] })));
+  }
+  return min;
+}
+
+function segsCross(grid, a, b) {
+  const checked = new Set();
+  for (const key of nearCells(a)) {
+    if (checked.has(key)) continue;
+    checked.add(key);
+    const segs = grid[key];
+    if (!segs) continue;
+    for (const seg of segs) {
+      if (segmentsCross(a, b, seg[0], seg[1])) return true;
+    }
+  }
+  for (const key of nearCells(b)) {
+    if (checked.has(key)) continue;
+    const segs = grid[key];
+    if (!segs) continue;
+    for (const seg of segs) {
+      if (segmentsCross(a, b, seg[0], seg[1])) return true;
+    }
+  }
+  const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+  const key = Math.floor(mid.lon / CELL_SIZE) * CELL_SIZE + ',' + Math.floor(mid.lat / CELL_SIZE) * CELL_SIZE;
+  if (!checked.has(key)) {
+    const segs = grid[key];
+    if (segs) {
+      for (const seg of segs) {
+        if (segmentsCross(a, b, seg[0], seg[1])) return true;
       }
     }
   }
+  return false;
 }
 
-function addRingSegments(coords, segments) {
-  for (let i = 0; i < coords.length - 1; i++) {
-    segments.push([
-      { lat: coords[i][1], lon: coords[i][0] },
-      { lat: coords[i + 1][1], lon: coords[i + 1][0] }
-    ]);
+function inAnyPolygon(point, rings) {
+  if (!rings) return false;
+  for (const ring of rings) {
+    if (pointInPolygon(point, ring)) return true;
   }
+  return false;
 }
 
-function addLineSegments(coords, segments) {
-  for (let i = 0; i < coords.length - 1; i++) {
-    segments.push([
-      { lat: coords[i][1], lon: coords[i][0] },
-      { lat: coords[i + 1][1], lon: coords[i + 1][0] }
-    ]);
-  }
-}
+const SAFE_DIST_NM = 1;
+const BROAD_DIST_NM = 5;
 
-export function crossesLand(coastline, a, b) {
-  for (const seg of coastline.segments) {
-    if (segmentsCross(a, b, seg[0], seg[1])) {
+export function crossesLand(coastline, a, b, startPt, endPt) {
+  const dA = nearestNm(a, coastline.grid);
+  const dB = nearestNm(b, coastline.grid);
+
+  if (segsCross(coastline.grid, a, b)) {
+    if (dA < SAFE_DIST_NM && dB < SAFE_DIST_NM) {
+    } else if (startPt && nearestNm(startPt, coastline.grid) < SAFE_DIST_NM && distanceNm(startPt, a) < 1) {
+    } else if (endPt && nearestNm(endPt, coastline.grid) < SAFE_DIST_NM && distanceNm(endPt, b) < 1) {
+    } else {
       return true;
     }
   }
 
-  for (const poly of coastline.polygons) {
-    if (pointInPolygon(a, poly)) return true;
-    if (pointInPolygon(b, poly)) return true;
-    if (pointInPolygon({ lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 }, poly)) return true;
-  }
+  if (dA > BROAD_DIST_NM && inAnyPolygon(a, coastline.outerRings)) return true;
+  if (dB > BROAD_DIST_NM && inAnyPolygon(b, coastline.outerRings)) return true;
 
-  const dist = distanceNm(a, b);
-  if (dist > 1) {
-    const steps = Math.ceil(dist);
+  const legDist = distanceNm(a, b);
+  if (legDist > 2) {
+    const steps = Math.ceil(legDist / 2);
     for (let i = 1; i < steps; i++) {
       const mid = interpolatePoint(a, b, i / steps);
-      for (const poly of coastline.polygons) {
-        if (pointInPolygon(mid, poly)) return true;
-      }
+      if (nearestNm(mid, coastline.grid) > BROAD_DIST_NM && inAnyPolygon(mid, coastline.outerRings)) return true;
     }
   }
 

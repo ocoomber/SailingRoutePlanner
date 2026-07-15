@@ -169,11 +169,11 @@ function clearWindArrows() {
 
 export function drawLandOverlay(coastline) {
   clearLandOverlay();
-  if (!coastline || !coastline.polygons) return;
+  if (!coastline || !coastline.outerRings) return;
 
   landOverlay = L.layerGroup().addTo(map);
 
-  for (const ring of coastline.polygons) {
+  for (const ring of coastline.outerRings) {
     const latlngs = ring.map(p => [p.lat, p.lon]);
     L.polygon(latlngs, {
       color: '#dc2626',
@@ -181,6 +181,24 @@ export function drawLandOverlay(coastline) {
       fillOpacity: 0.35,
       weight: 1,
       opacity: 0.5
+    }).addTo(landOverlay);
+  }
+
+  for (const ring of coastline.innerRings) {
+    const latlngs = ring.map(p => [p.lat, p.lon]);
+    L.polygon(latlngs, {
+      color: '#2563eb',
+      fill: false,
+      weight: 1,
+      opacity: 0.6
+    }).addTo(landOverlay);
+  }
+
+  for (const seg of coastline.segments) {
+    L.polyline([[seg.a.lat, seg.a.lon], [seg.b.lat, seg.b.lon]], {
+      color: '#f59e0b',
+      weight: 1,
+      opacity: 0.4
     }).addTo(landOverlay);
   }
 }
