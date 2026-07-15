@@ -52,6 +52,13 @@ header .subtitle {
   margin-top: 0.15rem;
 }
 
+header .build-number {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-top: 0.1rem;
+  font-family: monospace;
+}
+
 main {
   flex: 1;
   padding: 1rem;
