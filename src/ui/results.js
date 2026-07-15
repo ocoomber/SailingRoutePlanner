@@ -1,7 +1,3 @@
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 function formatTime(date) {
   return date.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
@@ -45,18 +41,44 @@ export function showResults(legs, totalTime, timeMode, computedDeparture, target
   for (let i = 0; i < legs.length; i++) {
     const leg = legs[i];
     const li = document.createElement('li');
+    li.className = 'leg-item';
 
     const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
-    const headingSpan = document.createElement('span');
-    headingSpan.className = 'leg-heading';
-    headingSpan.textContent = `Leg ${i + 1}: ${leg.heading}\u00B0T`;
+    const endLonDir = leg.endWaypoint.lon < 0 ? 'W' : 'E';
 
-    const detailSpan = document.createElement('span');
-    detailSpan.className = 'leg-detail';
-    detailSpan.textContent = ` \u2192 ${leg.waypoint.lat.toFixed(4)}\u00B0N, ${Math.abs(leg.waypoint.lon).toFixed(4)}\u00B0${lonDir} (${formatDuration(leg.duration)})`;
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'leg-header';
+    headerDiv.textContent = `Leg ${i + 1}: ${leg.heading}\u00B0T`;
 
-    li.appendChild(headingSpan);
-    li.appendChild(detailSpan);
+    const detailsDiv = document.createElement('div');
+    detailsDiv.className = 'leg-details';
+
+    const fields = [
+      { label: 'From', value: `${leg.waypoint.lat.toFixed(4)}\u00B0N, ${Math.abs(leg.waypoint.lon).toFixed(4)}\u00B0${lonDir}` },
+      { label: 'To', value: `${leg.endWaypoint.lat.toFixed(4)}\u00B0N, ${Math.abs(leg.endWaypoint.lon).toFixed(4)}\u00B0${endLonDir}` },
+      { label: 'Distance', value: `${leg.distance.toFixed(1)} NM` },
+      { label: 'SoG', value: `${leg.sog.toFixed(1)} kn` },
+      { label: 'Time', value: formatDuration(leg.duration) },
+      { label: 'Wind', value: `${leg.windSpeed} kn TWA ${leg.windAngle}\u00B0` },
+      { label: 'Point of sail', value: leg.windDescription }
+    ];
+
+    for (const field of fields) {
+      const row = document.createElement('div');
+      row.className = 'leg-field';
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'leg-field-label';
+      labelSpan.textContent = `${field.label}: `;
+      const valueSpan = document.createElement('span');
+      valueSpan.className = 'leg-field-value';
+      valueSpan.textContent = field.value;
+      row.appendChild(labelSpan);
+      row.appendChild(valueSpan);
+      detailsDiv.appendChild(row);
+    }
+
+    li.appendChild(headerDiv);
+    li.appendChild(detailsDiv);
     legList.appendChild(li);
   }
 }
