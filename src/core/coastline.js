@@ -62,7 +62,7 @@ function segsCross(grid, a, b) {
     }
   }
   const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
-  const key = Math.floor(mid.lon / CELL_SIZE) * CELL_SIZE + ',' + Math.floor(mid.lat / CELL_SIZE) * CELL_SIZE;
+  const key = (Math.floor(mid.lon / CELL_SIZE) * CELL_SIZE).toFixed(3) + ',' + (Math.floor(mid.lat / CELL_SIZE) * CELL_SIZE).toFixed(3);
   if (!checked.has(key)) {
     const segs = grid[key];
     if (segs) {
@@ -83,7 +83,7 @@ function inAnyPolygon(point, rings) {
 }
 
 const SAFE_DIST_NM = 1;
-const BROAD_DIST_NM = 5;
+const BROAD_DIST_NM = 1;
 
 export function crossesLand(coastline, a, b, startPt, endPt) {
   const dA = nearestNm(a, coastline.grid);
