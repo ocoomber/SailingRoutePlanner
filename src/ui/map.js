@@ -132,24 +132,24 @@ function drawWindArrows(legs) {
     const midLat = (leg.waypoint.lat + leg.endWaypoint.lat) / 2;
     const midLon = (leg.waypoint.lon + leg.endWaypoint.lon) / 2;
 
-    const arrowLen = 0.05;
+    const arrowLen = 0.02;
     const windRad = (leg.windDir + 180) * Math.PI / 180;
     const tipLat = midLat + arrowLen * Math.cos(windRad);
     const tipLon = midLon + arrowLen * Math.sin(windRad);
 
     const line = L.polyline(
       [[midLat, midLon], [tipLat, tipLon]],
-      { color: '#6b21a8', weight: 2, opacity: 0.8 }
+      { color: '#6b21a8', weight: 1.5, opacity: 0.8 }
     ).addTo(map);
 
-    const headLen = 0.012;
+    const headLen = 0.005;
     const headAng1 = windRad + 2.6;
     const headAng2 = windRad - 2.6;
     const head1 = [tipLat + headLen * Math.cos(headAng1), tipLon + headLen * Math.sin(headAng1)];
     const head2 = [tipLat + headLen * Math.cos(headAng2), tipLon + headLen * Math.sin(headAng2)];
 
     const head = L.polyline([head1, [tipLat, tipLon], head2], {
-      color: '#6b21a8', weight: 2, opacity: 0.8
+      color: '#6b21a8', weight: 1.5, opacity: 0.8
     }).addTo(map);
 
     const label = `${leg.windSpeed}kn ${leg.windDir}\u00B0`;
