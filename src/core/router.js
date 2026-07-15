@@ -1,4 +1,4 @@
-import { distanceNm, destination, addVectors } from './geometry.js';
+import { distanceNm, bearing, destination, addVectors } from './geometry.js';
 import { lookupSpeed } from './polar.js';
 import { crossesLand } from './coastline.js';
 import { interpolateWind } from './wind-interpolation.js';
@@ -28,7 +28,7 @@ export function calculateRoute(params) {
   log.push(`Wind grid times: ${windGrid.grid.length} hours`);
   log.push(`---`);
 
-  let isochrone = [{ point: start, heading: null, parent: null, time: departureTime }];
+  let isochrone = [{ point: start, heading: null, parent: null, time: departureTime, sog: 0, twa: 0, windSpeed: 0, windDir: 0 }];
   const history = [isochrone];
 
   const maxSteps = 500;
@@ -75,7 +75,11 @@ export function calculateRoute(params) {
           heading: moveVector.direction,
           parent: node,
           time: addHours(node.time, timeStepHours),
-          distToEnd
+          distToEnd,
+          sog: moveVector.speed,
+          twa,
+          windSpeed: wind.speed,
+          windDir: wind.direction
         });
       }
     }
@@ -107,7 +111,7 @@ export function calculateRoute(params) {
       for (let i = 0; i < route.length; i++) {
         const leg = route[i];
         const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
-        log.push(`  Leg ${i + 1}: ${leg.heading}°T → ${leg.waypoint.lat.toFixed(4)}°N ${Math.abs(leg.waypoint.lon).toFixed(4)}°${lonDir} (${leg.duration.toFixed(1)}h)`);
+        log.push(`  Leg ${i + 1}: ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.distance.toFixed(1)}NM ${leg.duration.toFixed(1)}h ${leg.windDescription}`);
       }
       return { route, log: log.join('\n') };
     }
@@ -164,33 +168,84 @@ function simplifyLegs(path, threshold) {
   const legs = [];
   let legStart = path[firstRealIdx];
   let lastHeading = path[firstRealIdx].heading;
+  let totalSog = path[firstRealIdx].sog;
+  let sogCount = 1;
+  let totalTwa = path[firstRealIdx].twa;
+  let totalWindSpeed = path[firstRealIdx].windSpeed;
+  let windCount = 1;
 
   for (let i = firstRealIdx + 1; i < path.length; i++) {
     const headingDiff = Math.abs(normalizeAngle(path[i].heading - lastHeading));
 
     if (headingDiff >= threshold) {
       const durationMs = new Date(path[i].time) - new Date(legStart.time);
+      const endNode = path[i - 1];
+      const distance = distanceNm(legStart.point, endNode.point);
+      const avgSog = totalSog / sogCount;
+      const avgTwa = totalTwa / windCount;
+      const avgWindSpeed = totalWindSpeed / windCount;
+
       legs.push({
         heading: Math.round(lastHeading),
         waypoint: { ...legStart.point },
-        duration: durationMs / 3600000
+        endWaypoint: { ...endNode.point },
+        duration: durationMs / 3600000,
+        distance,
+        sog: avgSog,
+        windAngle: Math.round(Math.abs(avgTwa)),
+        windSpeed: Math.round(avgWindSpeed),
+        windDescription: describeWind(avgTwa)
       });
+
       legStart = path[i - 1];
       lastHeading = path[i].heading;
+      totalSog = path[i].sog;
+      sogCount = 1;
+      totalTwa = path[i].twa;
+      totalWindSpeed = path[i].windSpeed;
+      windCount = 1;
     } else {
       lastHeading = path[i].heading;
+      totalSog += path[i].sog;
+      sogCount++;
+      totalTwa += path[i].twa;
+      totalWindSpeed += path[i].windSpeed;
+      windCount++;
     }
   }
 
   const lastNode = path[path.length - 1];
   const durationMs = new Date(lastNode.time) - new Date(legStart.time);
+  const distance = distanceNm(legStart.point, lastNode.point);
+  const avgSog = totalSog / sogCount;
+  const avgTwa = totalTwa / windCount;
+  const avgWindSpeed = totalWindSpeed / windCount;
+
   legs.push({
     heading: Math.round(lastHeading),
-    waypoint: { ...lastNode.point },
-    duration: durationMs / 3600000
+    waypoint: { ...legStart.point },
+    endWaypoint: { ...lastNode.point },
+    duration: durationMs / 3600000,
+    distance,
+    sog: avgSog,
+    windAngle: Math.round(Math.abs(avgTwa)),
+    windSpeed: Math.round(avgWindSpeed),
+    windDescription: describeWind(avgTwa)
   });
 
   return legs;
+}
+
+function describeWind(twa) {
+  const absAngle = Math.abs(twa);
+  const side = twa >= 0 ? 'port' : 'starboard';
+
+  if (absAngle < 30) return `dead downwind`;
+  if (absAngle < 60) return `broad reach, wind on ${side}`;
+  if (absAngle < 100) return `beam reach, wind on ${side}`;
+  if (absAngle < 140) return `close reach, wind on ${side}`;
+  if (absAngle < 160) return `close hauled, wind on ${side}`;
+  return `into wind`;
 }
 
 function normalizeAngle(deg) {

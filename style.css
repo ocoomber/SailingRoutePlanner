@@ -228,22 +228,39 @@ textarea {
 }
 
 #leg-list {
-  padding-left: 1.5rem;
+  padding-left: 0;
+  list-style: none;
   font-size: 0.85rem;
 }
 
-#leg-list li {
-  margin-bottom: 0.3rem;
-  line-height: 1.4;
+.leg-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
-#leg-list .leg-heading {
+.leg-header {
   font-weight: 600;
+  margin-bottom: 0.3rem;
 }
 
-#leg-list .leg-detail {
-  color: var(--color-muted);
+.leg-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.15rem 1rem;
+}
+
+.leg-field {
   font-size: 0.8rem;
+}
+
+.leg-field-label {
+  color: var(--color-muted);
+}
+
+.leg-field-value {
+  color: var(--color-text);
 }
 
 #debug-log {
