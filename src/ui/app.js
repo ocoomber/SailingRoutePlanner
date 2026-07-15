@@ -2,7 +2,7 @@ import { loadPolars } from '../core/polar.js';
 import { loadCoastline } from '../core/coastline.js';
 import { calculateRoute } from '../core/router.js';
 import { fetchWindGrid } from '../services/wind.js';
-import { initMap, setStart, setEnd, drawRoute, clearAll } from './map.js';
+import { initMap, setStart, setEnd, drawRoute, clearAll, drawLandOverlay, clearLandOverlay } from './map.js';
 import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
 import { showResults, showError, hideResults, showLoading, hideLoading, showLog, hideLog } from './results.js';
 
@@ -139,6 +139,15 @@ async function init() {
 
   document.getElementById('calculate-btn').addEventListener('click', onCalculate);
   document.getElementById('clear-btn').addEventListener('click', onClear);
+
+  document.getElementById('show-land-overlay').addEventListener('change', (e) => {
+    if (!coastline) return;
+    if (e.target.checked) {
+      drawLandOverlay(coastline);
+    } else {
+      clearLandOverlay();
+    }
+  });
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);

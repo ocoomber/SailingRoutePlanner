@@ -6,6 +6,7 @@ let legMarkers = [];
 let windArrows = [];
 let placing = 'start';
 let onPointSelected = null;
+let landOverlay = null;
 
 export function initMap(callback) {
   onPointSelected = callback;
@@ -164,6 +165,31 @@ function clearWindArrows() {
     map.removeLayer(m);
   }
   windArrows = [];
+}
+
+export function drawLandOverlay(coastline) {
+  clearLandOverlay();
+  if (!coastline || !coastline.polygons) return;
+
+  landOverlay = L.layerGroup().addTo(map);
+
+  for (const ring of coastline.polygons) {
+    const latlngs = ring.map(p => [p.lat, p.lon]);
+    L.polygon(latlngs, {
+      color: '#dc2626',
+      fillColor: '#dc2626',
+      fillOpacity: 0.35,
+      weight: 1,
+      opacity: 0.5
+    }).addTo(landOverlay);
+  }
+}
+
+export function clearLandOverlay() {
+  if (landOverlay) {
+    map.removeLayer(landOverlay);
+    landOverlay = null;
+  }
 }
 
 export function clearRoute() {
