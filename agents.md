@@ -52,7 +52,8 @@ Isochrone method:
 - Cross-check against chart before departure
 
 ## Current State
-Building Phase 1.
+Prototyping Phase 1. Testing against the live GitHub Pages build, not a local server.
+Commit directly to main after each meaningful change — no branches, no PRs, no waiting.
 
 ## Conventions
 - ES module imports with explicit .js extensions

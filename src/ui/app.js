@@ -3,26 +3,35 @@ import { loadCoastline } from '../core/coastline.js';
 import { calculateRoute } from '../core/router.js';
 import { fetchWindGrid } from '../services/wind.js';
 import { initMap, setStart, setEnd, drawRoute, clearAll } from './map.js';
-import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle } from './controls.js';
+import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
 import { showResults, showError, hideResults, showLoading, hideLoading } from './results.js';
 
 let polars = null;
 let coastline = null;
 
 async function loadData() {
-  const [polarsResp, coastResp] = await Promise.all([
-    fetch('src/data/polars/oceanis393.json'),
-    fetch('src/data/coastlines/sw-england.json')
-  ]);
+  const calcBtn = document.getElementById('calculate-btn');
+  calcBtn.disabled = true;
+  calcBtn.textContent = 'Loading data...';
 
-  if (!polarsResp.ok) throw new Error('Failed to load polar data');
-  if (!coastResp.ok) throw new Error('Failed to load coastline data');
+  try {
+    const [polarsResp, coastResp] = await Promise.all([
+      fetch('src/data/polars/oceanis393.json'),
+      fetch('src/data/coastlines/sw-england.json')
+    ]);
 
-  const polarsJson = await polarsResp.json();
-  const coastJson = await coastResp.json();
+    if (!polarsResp.ok) throw new Error('Failed to load polar data');
+    if (!coastResp.ok) throw new Error('Failed to load coastline data');
 
-  polars = loadPolars(polarsJson);
-  coastline = loadCoastline(coastJson);
+    const polarsJson = await polarsResp.json();
+    const coastJson = await coastResp.json();
+
+    polars = loadPolars(polarsJson);
+    coastline = loadCoastline(coastJson);
+  } finally {
+    calcBtn.disabled = false;
+    calcBtn.textContent = 'Calculate Route';
+  }
 }
 
 function onPointSelected(field, lat, lon) {
@@ -57,8 +66,22 @@ async function onCalculate() {
       west: Math.min(start.lon, end.lon) - 0.5
     };
 
-    const departureISO = new Date(inputs.departure).toISOString();
-    const endTime = new Date(new Date(inputs.departure).getTime() + 48 * 3600000).toISOString();
+    const targetTime = new Date(inputs.departure);
+
+    let departureTime;
+    let arrivalTime;
+
+    if (inputs.timeMode === 'departure') {
+      departureTime = targetTime;
+    } else {
+      arrivalTime = targetTime;
+      departureTime = new Date(targetTime.getTime() - 48 * 3600000);
+    }
+
+    const departureISO = departureTime.toISOString();
+    const endTime = arrivalTime
+      ? arrivalTime.toISOString()
+      : new Date(departureTime.getTime() + 48 * 3600000).toISOString();
 
     const windGrid = await fetchWindGrid(area, departureISO, endTime);
 
@@ -84,9 +107,12 @@ async function onCalculate() {
     }
 
     const totalTime = legs.reduce((sum, l) => sum + l.duration, 0);
+    const computedDeparture = inputs.timeMode === 'arrival'
+      ? new Date(arrivalTime.getTime() - totalTime * 3600000)
+      : null;
 
     drawRoute(legs);
-    showResults(legs, totalTime);
+    showResults(legs, totalTime, inputs.timeMode, computedDeparture, targetTime);
   } catch (err) {
     hideLoading();
     showError(err.message);
@@ -106,6 +132,7 @@ function onClear() {
 async function init() {
   initMap(onPointSelected);
   setupTideToggle();
+  setupTimeModeToggle();
 
   document.getElementById('calculate-btn').addEventListener('click', onCalculate);
   document.getElementById('clear-btn').addEventListener('click', onClear);
