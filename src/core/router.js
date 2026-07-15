@@ -1,7 +1,7 @@
 import { distanceNm, destination, addVectors } from './geometry.js';
 import { lookupSpeed } from './polar.js';
 import { crossesLand } from './coastline.js';
-import { interpolateWind } from '../services/wind.js';
+import { interpolateWind } from './wind-interpolation.js';
 
 const HEADINGS_PER_STEP = 36;
 const HEADING_STEP = 360 / HEADINGS_PER_STEP;
@@ -13,8 +13,9 @@ export function calculateRoute(params) {
   } = params;
 
   const timeStepHours = timeStepMinutes / 60;
+  const totalDist = distanceNm(start, end);
 
-  let isochrone = [{ point: start, heading: 0, parent: null, time: departureTime }];
+  let isochrone = [{ point: start, heading: null, parent: null, time: departureTime }];
   const history = [isochrone];
 
   const maxSteps = 500;
@@ -25,8 +26,9 @@ export function calculateRoute(params) {
     for (const node of isochrone) {
       for (let h = 0; h < 360; h += HEADING_STEP) {
         const wind = interpolateWind(windGrid, node.point.lat, node.point.lon, node.time);
-        const twa = normalizeAngle(h - wind.direction);
-        const boatSpeed = lookupSpeed(polars, twa, wind.speed);
+        const raw = h - wind.direction;
+        const twa = ((raw % 360) + 540) % 360 - 180;
+        const boatSpeed = lookupSpeed(polars, Math.abs(twa), wind.speed);
 
         if (boatSpeed <= 0) continue;
 
@@ -63,7 +65,8 @@ export function calculateRoute(params) {
     isochrone = pruned;
 
     const closest = isochrone[0];
-    if (closest.distToEnd < 1.0) {
+    const arrivalThreshold = Math.max(0.5, totalDist * 0.02);
+    if (closest.distToEnd < arrivalThreshold) {
       return buildRoute(closest, history, headingThreshold);
     }
   }
@@ -100,11 +103,18 @@ function buildRoute(endNode, history, headingThreshold) {
 function simplifyLegs(path, threshold) {
   if (path.length === 0) return [];
 
-  const legs = [];
-  let legStart = path[0];
-  let lastHeading = path[0].heading;
+  let firstRealIdx = 0;
+  while (firstRealIdx < path.length && path[firstRealIdx].heading === null) {
+    firstRealIdx++;
+  }
 
-  for (let i = 1; i < path.length; i++) {
+  if (firstRealIdx >= path.length) return [];
+
+  const legs = [];
+  let legStart = path[firstRealIdx];
+  let lastHeading = path[firstRealIdx].heading;
+
+  for (let i = firstRealIdx + 1; i < path.length; i++) {
     const headingDiff = Math.abs(normalizeAngle(path[i].heading - lastHeading));
 
     if (headingDiff >= threshold) {
@@ -125,7 +135,7 @@ function simplifyLegs(path, threshold) {
   const durationMs = new Date(lastNode.time) - new Date(legStart.time);
   legs.push({
     heading: Math.round(lastHeading),
-    waypoint: { ...legStart.point },
+    waypoint: { ...lastNode.point },
     duration: durationMs / 3600000
   });
 
@@ -144,9 +154,6 @@ function addHours(time, hours) {
 
 function getTidalVector(currents, time, departureTime) {
   const hoursSinceDep = (new Date(time) - new Date(departureTime)) / 3600000;
-  const idx = Math.floor(hoursSinceDep) % currents.length;
-
+  const idx = ((Math.floor(hoursSinceDep) % currents.length) + currents.length) % currents.length;
   return currents[idx];
 }
-
-

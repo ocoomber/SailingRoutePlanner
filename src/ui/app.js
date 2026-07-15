@@ -10,19 +10,28 @@ let polars = null;
 let coastline = null;
 
 async function loadData() {
-  const [polarsResp, coastResp] = await Promise.all([
-    fetch('src/data/polars/oceanis393.json'),
-    fetch('src/data/coastlines/sw-england.json')
-  ]);
+  const calcBtn = document.getElementById('calculate-btn');
+  calcBtn.disabled = true;
+  calcBtn.textContent = 'Loading data...';
 
-  if (!polarsResp.ok) throw new Error('Failed to load polar data');
-  if (!coastResp.ok) throw new Error('Failed to load coastline data');
+  try {
+    const [polarsResp, coastResp] = await Promise.all([
+      fetch('src/data/polars/oceanis393.json'),
+      fetch('src/data/coastlines/sw-england.json')
+    ]);
 
-  const polarsJson = await polarsResp.json();
-  const coastJson = await coastResp.json();
+    if (!polarsResp.ok) throw new Error('Failed to load polar data');
+    if (!coastResp.ok) throw new Error('Failed to load coastline data');
 
-  polars = loadPolars(polarsJson);
-  coastline = loadCoastline(coastJson);
+    const polarsJson = await polarsResp.json();
+    const coastJson = await coastResp.json();
+
+    polars = loadPolars(polarsJson);
+    coastline = loadCoastline(coastJson);
+  } finally {
+    calcBtn.disabled = false;
+    calcBtn.textContent = 'Calculate Route';
+  }
 }
 
 function onPointSelected(field, lat, lon) {

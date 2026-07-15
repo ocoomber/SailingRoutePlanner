@@ -1,3 +1,7 @@
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function formatTime(date) {
   return date.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
@@ -26,11 +30,15 @@ export function showResults(legs, totalTime, timeMode, computedDeparture, target
 
   summary.textContent = summaryText;
 
-  warnings.innerHTML = `
-    <strong>Warnings:</strong> Tidal stream not modelled. This plan is based on
-    forecast data which can be wrong. Always cross-check against your chart
-    and pilot book before departure.
-  `;
+  const warnP = document.createElement('p');
+  const warnStrong = document.createElement('strong');
+  warnStrong.textContent = 'Warnings: ';
+  warnP.appendChild(warnStrong);
+  warnP.appendChild(document.createTextNode(
+    'Tidal stream not modelled. This plan is based on forecast data which can be wrong. Always cross-check against your chart and pilot book before departure.'
+  ));
+  warnings.innerHTML = '';
+  warnings.appendChild(warnP);
 
   legList.innerHTML = '';
 
@@ -39,15 +47,16 @@ export function showResults(legs, totalTime, timeMode, computedDeparture, target
     const li = document.createElement('li');
 
     const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
+    const headingSpan = document.createElement('span');
+    headingSpan.className = 'leg-heading';
+    headingSpan.textContent = `Leg ${i + 1}: ${leg.heading}\u00B0T`;
 
-    li.innerHTML = `
-      <span class="leg-heading">Leg ${i + 1}: ${leg.heading}°T</span>
-      <span class="leg-detail">
-        → ${leg.waypoint.lat.toFixed(4)}°N, ${Math.abs(leg.waypoint.lon).toFixed(4)}°${lonDir}
-        (${formatDuration(leg.duration)})
-      </span>
-    `;
+    const detailSpan = document.createElement('span');
+    detailSpan.className = 'leg-detail';
+    detailSpan.textContent = ` \u2192 ${leg.waypoint.lat.toFixed(4)}\u00B0N, ${Math.abs(leg.waypoint.lon).toFixed(4)}\u00B0${lonDir} (${formatDuration(leg.duration)})`;
 
+    li.appendChild(headingSpan);
+    li.appendChild(detailSpan);
     legList.appendChild(li);
   }
 }
@@ -62,7 +71,13 @@ export function showError(message) {
   summary.textContent = '';
   legList.innerHTML = '';
 
-  warnings.innerHTML = `<strong>Error:</strong> ${message}`;
+  warnings.innerHTML = '';
+  const p = document.createElement('p');
+  const strong = document.createElement('strong');
+  strong.textContent = 'Error: ';
+  p.appendChild(strong);
+  p.appendChild(document.createTextNode(message));
+  warnings.appendChild(p);
 }
 
 export function hideResults() {

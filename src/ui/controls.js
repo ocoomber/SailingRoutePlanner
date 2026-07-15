@@ -1,3 +1,5 @@
+const MAX_TIDAL_INPUT_LENGTH = 2000;
+
 export function getInputs() {
   return {
     startLat: parseFloat(document.getElementById('start-lat').value),
@@ -28,15 +30,36 @@ export function validateInputs(inputs) {
 
   if (isNaN(inputs.startLat) || isNaN(inputs.startLon)) {
     errors.push('Start coordinates are required');
+  } else {
+    if (inputs.startLat < -90 || inputs.startLat > 90) {
+      errors.push('Start latitude must be between -90 and 90');
+    }
+    if (inputs.startLon < -180 || inputs.startLon > 180) {
+      errors.push('Start longitude must be between -180 and 180');
+    }
   }
+
   if (isNaN(inputs.endLat) || isNaN(inputs.endLon)) {
     errors.push('End coordinates are required');
+  } else {
+    if (inputs.endLat < -90 || inputs.endLat > 90) {
+      errors.push('End latitude must be between -90 and 90');
+    }
+    if (inputs.endLon < -180 || inputs.endLon > 180) {
+      errors.push('End longitude must be between -180 and 180');
+    }
   }
+
   if (!inputs.departure) {
     errors.push('Target time is required');
   }
+
   if (inputs.timeStep < 5 || inputs.timeStep > 60) {
     errors.push('Time step must be between 5 and 60 minutes');
+  }
+
+  if (isNaN(inputs.headingThreshold) || inputs.headingThreshold < 5 || inputs.headingThreshold > 45) {
+    errors.push('Heading threshold must be between 5 and 45 degrees');
   }
 
   return errors;
@@ -60,7 +83,8 @@ export function setupTimeModeToggle() {
 export function parseTidalData(text) {
   if (!text.trim()) return null;
 
-  const lines = text.trim().split('\n');
+  const truncated = text.slice(0, MAX_TIDAL_INPUT_LENGTH);
+  const lines = truncated.trim().split('\n');
   const currents = [];
 
   for (const line of lines) {
