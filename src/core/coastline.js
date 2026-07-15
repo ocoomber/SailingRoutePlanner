@@ -70,9 +70,9 @@ export function crossesLand(coastline, a, b) {
   if (coastline.polygons) {
     const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
     for (const polygon of coastline.polygons) {
-      if (pointInPolygon(mid, polygon)) return true;
-      if (pointInPolygon(a, polygon)) return true;
-      if (pointInPolygon(b, polygon)) return true;
+      if (!pointInPolygon(mid, polygon)) return true;
+      if (!pointInPolygon(a, polygon)) return true;
+      if (!pointInPolygon(b, polygon)) return true;
     }
   }
 
