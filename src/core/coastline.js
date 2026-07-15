@@ -1,4 +1,4 @@
-import { segmentsCross } from './geometry.js';
+import { segmentsCross, pointInPolygon, distanceNm, interpolatePoint } from './geometry.js';
 
 export function loadCoastline(geojson) {
   const segments = [];
@@ -30,14 +30,14 @@ function extractSegments(geometry, segments) {
 
 function extractPolygons(geometry, polygons) {
   if (geometry.type === 'Polygon') {
-    polygons.push(
-      geometry.coordinates[0].map(c => ({ lat: c[1], lon: c[0] }))
-    );
+    for (const ring of geometry.coordinates) {
+      polygons.push(ring.map(c => ({ lat: c[1], lon: c[0] })));
+    }
   } else if (geometry.type === 'MultiPolygon') {
     for (const polygon of geometry.coordinates) {
-      polygons.push(
-        polygon[0].map(c => ({ lat: c[1], lon: c[0] }))
-      );
+      for (const ring of polygon) {
+        polygons.push(ring.map(c => ({ lat: c[1], lon: c[0] })));
+      }
     }
   }
 }
@@ -64,6 +64,23 @@ export function crossesLand(coastline, a, b) {
   for (const seg of coastline.segments) {
     if (segmentsCross(a, b, seg[0], seg[1])) {
       return true;
+    }
+  }
+
+  for (const poly of coastline.polygons) {
+    if (pointInPolygon(a, poly)) return true;
+    if (pointInPolygon(b, poly)) return true;
+    if (pointInPolygon({ lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 }, poly)) return true;
+  }
+
+  const dist = distanceNm(a, b);
+  if (dist > 1) {
+    const steps = Math.ceil(dist);
+    for (let i = 1; i < steps; i++) {
+      const mid = interpolatePoint(a, b, i / steps);
+      for (const poly of coastline.polygons) {
+        if (pointInPolygon(mid, poly)) return true;
+      }
     }
   }
 
