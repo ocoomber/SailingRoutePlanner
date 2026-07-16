@@ -33,5 +33,13 @@
     "end": { "lat": 50.10, "lon": -3.85 },
     "expectRoute": true,
     "description": "Eddystone area to Start Bay — open water south of Cornwall coast"
+  },
+  {
+    "name": "Lyme Bay — 0.5NM clearance margin",
+    "start": { "lat": 50.30, "lon": -3.35 },
+    "end": { "lat": 50.48, "lon": -2.60 },
+    "expectRoute": true,
+    "clearanceMarginNm": 0.5,
+    "description": "Open water route with 0.5NM clearance — should stay well offshore"
   }
 ]

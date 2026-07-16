@@ -10,7 +10,7 @@ export function calculateRoute(params) {
     start, end, departureTime, coastline,
     timeStepMinutes, headingThreshold, tidalCurrent,
     polars, windGrid,
-    constantSpeedKn
+    constantSpeedKn, clearanceMarginNm
   } = params;
 
   const timeStepHours = timeStepMinutes / 60;
@@ -79,7 +79,7 @@ export function calculateRoute(params) {
         const distNm = moveVector.speed * timeStepHours;
         const newPoint = destination(node.point, moveVector.direction, distNm);
 
-        if (crossesLand(coastline, node.point, newPoint, start)) {
+        if (crossesLand(coastline, node.point, newPoint, start, null, clearanceMarginNm)) {
           landBlocked++;
           if (step < 3) {
             log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);
@@ -130,7 +130,7 @@ export function calculateRoute(params) {
 
       if (constantSpeedKn && route.length > 1) {
         const totalPathDist = route.reduce((s, l) => s + l.distance, 0);
-        if (totalPathDist > totalDist * 1.3 && !crossesLand(coastline, start, end, start, end)) {
+        if (totalPathDist > totalDist * 1.3 && !crossesLand(coastline, start, end, start, end, clearanceMarginNm)) {
           const hdg = Math.round(bearing(start, end));
           const duration = totalDist / constantSpeedKn;
           route = [{
