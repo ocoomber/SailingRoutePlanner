@@ -1,0 +1,213 @@
+openapi: 3.1.0
+info:
+  title: Sailing Passage Planner API
+  version: 1.0.0
+  description: >
+    Plans a sailing passage for a single boat/skipper in SW England waters.
+    Given a start point, end point, and departure time, returns a full
+    structured passage plan: sail-configuration blocks (motor/headsail/
+    full/reefed), leg-by-leg headings and timings, the decision log behind
+    every choice, and a plain-language narration. Always call this tool
+    for any route, wind, or sail-configuration question — never estimate
+    figures yourself.
+servers:
+  - url: https://your-deployed-host.example.com
+    description: Replace with the operator's deployed host (see server/README.md)
+
+paths:
+  /plan-route:
+    post:
+      operationId: planRoute
+      summary: Plan a sailing passage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanRouteRequest'
+      responses:
+        '200':
+          description: Passage plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PassageResult'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+components:
+  schemas:
+    LatLon:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+
+    ComfortParams:
+      type: object
+      description: Any subset of comfort parameters; omitted fields use sensible defaults.
+      properties:
+        minSailableWindKn: { type: number }
+        engineOnWindKn: { type: number }
+        engineOffWindKn: { type: number }
+        reefWindKn: { type: number }
+        maxComfortWindKn: { type: number }
+        minWorthwhileDurationMin:
+          type: object
+          properties:
+            headsail: { type: number }
+            full: { type: number }
+            reefed: { type: number }
+        soloSailing: { type: boolean }
+        soloHassleMultiplier: { type: number }
+        mainHoistDifficultyByPointOfSail:
+          type: object
+          properties:
+            upwind: { type: number }
+            reach: { type: number }
+            downwind: { type: number }
+        finalApproachBufferMin: { type: number }
+        motorCruiseSpeedKn: { type: number }
+        headsailSpeedFactor: { type: number }
+        reefedSpeedFactor: { type: number }
+        headsailPreferenceBandKn: { type: number }
+        noGoAngleDeg: { type: number, nullable: true }
+
+    PlanRouteRequest:
+      type: object
+      required: [start, end, departureTime]
+      properties:
+        start:
+          $ref: '#/components/schemas/LatLon'
+        end:
+          $ref: '#/components/schemas/LatLon'
+        departureTime:
+          type: string
+          format: date-time
+          description: ISO-8601 UTC departure time
+        boat:
+          type: string
+          enum: [oceanis393]
+          default: oceanis393
+          description: Polar file selector. Currently the only option.
+        comfort:
+          $ref: '#/components/schemas/ComfortParams'
+        tidal:
+          type: object
+          nullable: true
+          description: Not yet implemented — reserved for the tidal-stream module. Omit or send null.
+        debug:
+          type: boolean
+          default: false
+          description: When true, includes the internal debug.log and debug.rawNodes in the response.
+
+    ConfigBlock:
+      type: object
+      properties:
+        config: { type: string, enum: [motor, headsail, full, reefed] }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        startPoint: { $ref: '#/components/schemas/LatLon' }
+        endPoint: { $ref: '#/components/schemas/LatLon' }
+        decision:
+          type: object
+          nullable: true
+          description: ConfigDecisionRecord explaining why this block starts here.
+
+    Leg:
+      type: object
+      properties:
+        config: { type: string, enum: [motor, headsail, full, reefed] }
+        heading: { type: number }
+        waypoint: { $ref: '#/components/schemas/LatLon' }
+        endWaypoint: { $ref: '#/components/schemas/LatLon' }
+        startTime: { type: string, format: date-time }
+        duration: { type: number, description: hours }
+        distance: { type: number, description: nautical miles }
+        sog: { type: number, description: knots }
+        windSpeed: { type: number, description: knots }
+        windDir: { type: number, description: degrees true }
+        windAngle: { type: number, description: degrees }
+        windDescription: { type: string }
+        maneuver: { type: string, nullable: true, enum: [tack, gybe, null] }
+        tackSide: { type: string, nullable: true, enum: [port, starboard, null] }
+
+    PassageResult:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            start: { $ref: '#/components/schemas/LatLon' }
+            end: { $ref: '#/components/schemas/LatLon' }
+            departureTime: { type: string, format: date-time }
+            arrivalTime: { type: string, format: date-time, nullable: true }
+            totalDistanceNm: { type: number }
+            totalDurationH: { type: number }
+            motoringH: { type: number }
+            sailingH: { type: number }
+            configChanges: { type: integer }
+        configBlocks:
+          type: array
+          items: { $ref: '#/components/schemas/ConfigBlock' }
+        legs:
+          type: array
+          items: { $ref: '#/components/schemas/Leg' }
+        decisions:
+          type: array
+          description: >
+            Union of decision records discriminated by `.kind`:
+            'heading', 'transition', 'config', 'landDeviation'.
+          items:
+            type: object
+        narration:
+          type: string
+          description: Full plain-language passage story. Relay this to the client verbatim or paraphrased.
+        warnings:
+          type: array
+          items: { type: string }
+        debug:
+          type: object
+          nullable: true
+          description: Only present when the request set debug=true.
+          properties:
+            log: { type: string }
+            rawNodes: { type: array, items: { type: object } }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Plain-language error message.

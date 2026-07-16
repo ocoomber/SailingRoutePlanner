@@ -14,8 +14,6 @@ let landOverlay = null;
 let coarseOverlay = null;
 let tileGridOverlay = null;
 let tileStateOverlay = null;
-let corridorOverlay = null;
-let roughRouteOverlay = null;
 
 const TILE_GRID_COLOR = '#6b7280';
 const TILE_FETCHED_COLOR = '#22c55e';
@@ -407,74 +405,6 @@ export function clearTileStates() {
   }
 }
 
-export function drawCorridorOverlay(corridorPath) {
-  clearCorridorOverlay();
-  if (!corridorPath || corridorPath.length < 2) return;
-
-  corridorOverlay = L.layerGroup().addTo(map);
-
-  const latlngs = corridorPath.map(p => [p.lat, p.lon]);
-  L.polygon(latlngs, {
-    color: '#6b21a8',
-    fillColor: '#6b21a8',
-    fillOpacity: 0.08,
-    weight: 2,
-    opacity: 0.4,
-    dashArray: '8 4'
-  }).addTo(corridorOverlay);
-}
-
-export function clearCorridorOverlay() {
-  if (corridorOverlay) {
-    map.removeLayer(corridorOverlay);
-    corridorOverlay = null;
-  }
-}
-
-export function drawRoughRoute(legs) {
-  clearRoughRoute();
-  if (!legs || legs.length === 0) return;
-
-  roughRouteOverlay = L.layerGroup().addTo(map);
-
-  const points = [];
-  for (let i = 0; i < legs.length; i++) {
-    const leg = legs[i];
-    if (points.length === 0 || points[points.length - 1][0] !== leg.waypoint.lat || points[points.length - 1][1] !== leg.waypoint.lon) {
-      points.push([leg.waypoint.lat, leg.waypoint.lon]);
-    }
-  }
-  const lastLeg = legs[legs.length - 1];
-  if (lastLeg.endWaypoint) {
-    points.push([lastLeg.endWaypoint.lat, lastLeg.endWaypoint.lon]);
-  }
-
-  L.polyline(points, {
-    color: '#7c3aed',
-    weight: 5,
-    opacity: 0.3,
-    dashArray: '10 8'
-  }).addTo(roughRouteOverlay);
-
-  for (let i = 0; i < legs.length; i++) {
-    const leg = legs[i];
-    L.circleMarker([leg.waypoint.lat, leg.waypoint.lon], {
-      radius: 3,
-      color: '#7c3aed',
-      fillColor: '#7c3aed',
-      fillOpacity: 0.3,
-      weight: 1
-    }).addTo(roughRouteOverlay);
-  }
-}
-
-export function clearRoughRoute() {
-  if (roughRouteOverlay) {
-    map.removeLayer(roughRouteOverlay);
-    roughRouteOverlay = null;
-  }
-}
-
 export function clearRoute() {
   if (routePolyline) {
     map.removeLayer(routePolyline);
@@ -499,8 +429,6 @@ export function clearAll() {
   clearCoarseOverlay();
   clearTileGrid();
   clearTileStates();
-  clearCorridorOverlay();
-  clearRoughRoute();
   placing = 'start';
 }
 

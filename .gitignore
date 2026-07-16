@@ -1,3 +1,4 @@
 serve.ps1
 serve.bat
 tiles/
+node_modules/

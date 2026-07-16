@@ -66,6 +66,56 @@ export function formatDecision(rec) {
   return parts.join('. ') + '.';
 }
 
+const CONFIG_LABEL = { full: 'the main', headsail: 'the headsail', reefed: 'a reef', motor: 'the motor' };
+const CONFIG_VERB = { full: 'hoisting', headsail: 'unfurling', reefed: 'tucking in', motor: 'starting' };
+const POINT_OF_SAIL_PHRASE = { upwind: 'a beat', reach: 'a beam reach', downwind: 'a run' };
+
+function formatDurationMin(mins) {
+  if (mins >= 60) {
+    const hours = mins / 60;
+    const hoursText = Number.isInteger(hours) ? hours : hours.toFixed(1);
+    return `${hoursText} hour${hours === 1 ? '' : 's'}`;
+  }
+  const rounded = Math.round(mins);
+  return `${rounded} minute${rounded === 1 ? '' : 's'}`;
+}
+
+export function formatConfigDecision(rec) {
+  if (rec.trigger === 'final-approach') {
+    return `Within ${Math.round(rec.windowMin)} minutes of destination — sails down, motoring in for arrival.`;
+  }
+
+  if (rec.trigger === 'wind-below-sailable') {
+    return `Wind easing to ${rec.windSpeedKn}kn — not enough to sail, motoring.`;
+  }
+
+  if (rec.trigger === 'wind-above-reef') {
+    return `Wind building to ${rec.windSpeedKn}kn — reefing down for comfort.`;
+  }
+
+  if (rec.trigger === 'hysteresis') {
+    return `Wind at ${rec.windSpeedKn}kn — not yet clear of the motor-off threshold, staying under engine.`;
+  }
+
+  if (rec.trigger === 'router-fallback') {
+    return `No sailable route found in this wind — falling back to motor.`;
+  }
+
+  const posText = POINT_OF_SAIL_PHRASE[rec.pointOfSail] || rec.pointOfSail;
+  const durationText = formatDurationMin(rec.windowMin);
+
+  if (rec.accepted) {
+    return `Wind forecast to hold around ${rec.windSpeedKn}kn for the next ${durationText} on ${posText} — worth ${CONFIG_VERB[rec.to]} ${CONFIG_LABEL[rec.to]}.`;
+  }
+
+  return `Wind window of ~${Math.round(rec.windowMin)} minutes at ${rec.windSpeedKn}kn expected before dropping again — not worth ${CONFIG_VERB[rec.to]} ${CONFIG_LABEL[rec.to]} for that short a stretch.`;
+}
+
+export function formatLandDeviation(rec) {
+  const sacrificed = (rec.rejectedVmg - rec.chosenVmg).toFixed(1);
+  return `Ideal heading ${rec.rejectedHeading}° (VMG ${rec.rejectedVmg.toFixed(1)}kn) blocked by land/clearance — deviated to ${rec.chosenHeading}° (VMG ${rec.chosenVmg.toFixed(1)}kn), sacrificing ${sacrificed}kn toward the destination.`;
+}
+
 export function formatTransition(transition) {
   const lines = [transition.statLine];
   lines.push(transition.explanation);
@@ -100,8 +150,23 @@ export function narrateRoute(rawNodes, route, decisions) {
 
   for (let i = 0; i < decisions.length; i++) {
     const rec = decisions[i];
-    lines.push(`[Step ${rec.step}] ${rec.position.lat.toFixed(3)},${rec.position.lon.toFixed(3)} at ${rec.time.slice(11, 16)}Z`);
-    lines.push(`  ${formatDecision(rec)}`);
+
+    if (rec.kind === 'transition') {
+      lines.push(`  ${formatTransition(rec)}`);
+      lines.push(``);
+      continue;
+    }
+
+    const stepLabel = rec.step !== undefined ? `[Step ${rec.step}] ` : '';
+    const posTime = rec.position && rec.time
+      ? `${rec.position.lat.toFixed(3)},${rec.position.lon.toFixed(3)} at ${rec.time.slice(11, 16)}Z`
+      : '';
+    if (stepLabel || posTime) lines.push(`${stepLabel}${posTime}`);
+
+    const formatted = rec.kind === 'landDeviation' ? formatLandDeviation(rec)
+      : rec.kind === 'config' ? formatConfigDecision(rec)
+      : formatDecision(rec);
+    lines.push(`  ${formatted}`);
     lines.push(``);
   }
 

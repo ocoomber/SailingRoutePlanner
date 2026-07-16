@@ -1,5 +1,5 @@
 import { bearing } from './geometry.js';
-import { lookupSpeed } from './polar.js';
+import { lookupSpeed, findNoGoAngle } from './polar.js';
 
 const DEG_TO_RAD = Math.PI / 180;
 const EVALUATION_STEP = 5;
@@ -20,15 +20,6 @@ function tackLabel(twa) {
 function vmgToward(heading, boatSpeed, bearingToDest) {
   const angleRad = (heading - bearingToDest) * DEG_TO_RAD;
   return boatSpeed * Math.cos(angleRad);
-}
-
-function findNoGoAngle(polars, windSpeed) {
-  for (const twa of polars.twaSteps) {
-    if (lookupSpeed(polars, twa, windSpeed) > 0) {
-      return twa;
-    }
-  }
-  return 45;
 }
 
 function evaluateAlternatives(polars, windSpeed, windDir, bearingToDest) {
@@ -126,6 +117,7 @@ export function evaluateDecision(node, end, polars) {
   }
 
   return {
+    kind: 'heading',
     step: 0,
     position: { lat: round1(node.point.lat), lon: round1(node.point.lon) },
     time: node.time,
@@ -163,6 +155,19 @@ export function analyzeRoute(rawNodes, end, polars) {
     const rec = evaluateDecision(node, end, polars);
     rec.step = i;
     decisions.push(rec);
+
+    if (node.landDeviation) {
+      decisions.push({
+        kind: 'landDeviation',
+        step: i,
+        time: node.time,
+        position: { lat: round1(node.point.lat), lon: round1(node.point.lon) },
+        rejectedHeading: node.landDeviation.rejectedHeading,
+        rejectedVmg: node.landDeviation.rejectedVmg,
+        chosenHeading: Math.round(node.heading),
+        chosenVmg: node.landDeviation.chosenVmg
+      });
+    }
   }
 
   return decisions;

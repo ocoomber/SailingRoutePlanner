@@ -1,37 +1,31 @@
 const API_BASE = 'https://api.open-meteo.com/v1/forecast';
-const RATE_LIMIT_MS = 150;
 
 export async function fetchWindGrid(area, startTime, endTime) {
   const points = samplePoints(area, 4);
   const startDate = startTime.slice(0, 10);
   const endDate = endTime.slice(0, 10);
 
-  const results = [];
-  for (const p of points) {
-    const params = new URLSearchParams({
-      latitude: p.lat,
-      longitude: p.lon,
-      hourly: 'wind_speed_10m,wind_direction_10m',
-      start_date: startDate,
-      end_date: endDate,
-      wind_speed_unit: 'kn',
-      timezone: 'UTC'
-    });
+  const params = new URLSearchParams({
+    latitude: points.map(p => p.lat).join(','),
+    longitude: points.map(p => p.lon).join(','),
+    hourly: 'wind_speed_10m,wind_direction_10m',
+    start_date: startDate,
+    end_date: endDate,
+    wind_speed_unit: 'kn',
+    timezone: 'UTC'
+  });
 
-    const resp = await fetch(`${API_BASE}?${params}`);
-    if (!resp.ok) {
-      throw new Error(`Wind API error: ${resp.status} for ${p.lat.toFixed(4)},${p.lon.toFixed(4)}`);
-    }
-
-    const data = await resp.json();
-    if (data.error) {
-      throw new Error(`Wind API error: ${data.reason}`);
-    }
-
-    results.push(data);
-    await new Promise(r => setTimeout(r, RATE_LIMIT_MS));
+  const resp = await fetch(`${API_BASE}?${params}`);
+  if (!resp.ok) {
+    throw new Error(`Wind API error: ${resp.status}`);
   }
 
+  const data = await resp.json();
+  if (data.error) {
+    throw new Error(`Wind API error: ${data.reason}`);
+  }
+
+  const results = Array.isArray(data) ? data : [data];
   return parseWindResponse(results, points);
 }
 

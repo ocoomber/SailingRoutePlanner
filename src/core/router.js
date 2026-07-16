@@ -1,14 +1,15 @@
 import { distanceNm, bearing, destination, addVectors } from './geometry.js';
-import { lookupSpeed } from './polar.js';
+import { lookupSpeed, findNoGoAngle } from './polar.js';
 import { crossesLand } from '../data/coastline/index.js';
 import { interpolateWind } from './wind-interpolation.js';
 
 const DEFAULT_HEADINGS = 36;
 const MAX_ISOCHRONE_SIZE = 200;
 const YIELD_INTERVAL_MS = 50;
-const MIN_TWA = 30;
 const VMG_STABILITY_THRESHOLD = 0.5;
 const MIN_LEG_DISTANCE_NM = 0.1;
+const LAND_DEVIATION_VMG_THRESHOLD = 0.5;
+const DEG_TO_RAD = Math.PI / 180;
 
 function yieldControl() {
   return new Promise(resolve => setTimeout(resolve, 0));
@@ -19,7 +20,8 @@ export async function calculateRoute(params) {
     start, end, departureTime, coastline,
     timeStepMinutes, headingThreshold, tidalCurrent,
     polars, windGrid,
-    constantSpeedKn, clearanceMarginNm
+    constantSpeedKn, clearanceMarginNm, noGoAngleDeg,
+    arriveByTime, allowIntoWind
   } = params;
 
   const timeStepHours = timeStepMinutes / 60;
@@ -53,11 +55,14 @@ export async function calculateRoute(params) {
 
   for (let step = 0; step < maxSteps; step++) {
     const nextIsochrone = [];
+    const bestRejectedByNode = new Map();
 
     const nHeadings = params.headingsPerStep || DEFAULT_HEADINGS;
     const headingStep = 360 / nHeadings;
 
     for (const node of isochrone) {
+      const brgToEnd = bearing(node.point, end);
+
       for (let h = 0; h < 360; h += headingStep) {
         let boatSpeed;
         let twaVal = 0;
@@ -72,7 +77,8 @@ export async function calculateRoute(params) {
           windSpd = wind.speed;
           const raw = h - wind.direction;
           twaVal = ((raw % 360) + 540) % 360 - 180;
-          if (Math.abs(twaVal) < MIN_TWA) {
+          const noGo = allowIntoWind ? 0 : (noGoAngleDeg ?? findNoGoAngle(polars, wind.speed));
+          if (Math.abs(twaVal) < noGo) {
             zeroSpeed++;
             continue;
           }
@@ -98,6 +104,11 @@ export async function calculateRoute(params) {
           landBlocked++;
           if (step < 3) {
             log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);
+          }
+          const rejectedVmg = moveVector.speed * Math.cos((moveVector.direction - brgToEnd) * DEG_TO_RAD);
+          const existing = bestRejectedByNode.get(node);
+          if (!existing || rejectedVmg > existing.vmg) {
+            bestRejectedByNode.set(node, { heading: moveVector.direction, vmg: rejectedVmg });
           }
           continue;
         }
@@ -130,6 +141,23 @@ export async function calculateRoute(params) {
     }
 
     const pruned = pruneIsochrone(nextIsochrone, 0.5);
+
+    for (const survivor of pruned) {
+      const rejected = bestRejectedByNode.get(survivor.parent);
+      if (!rejected) continue;
+
+      const brgToEnd = bearing(survivor.parent.point, end);
+      const chosenVmg = survivor.sog * Math.cos((survivor.heading - brgToEnd) * DEG_TO_RAD);
+
+      if (rejected.vmg - chosenVmg > LAND_DEVIATION_VMG_THRESHOLD) {
+        survivor.landDeviation = {
+          rejectedHeading: Math.round(rejected.heading),
+          rejectedVmg: Math.round(rejected.vmg * 10) / 10,
+          chosenVmg: Math.round(chosenVmg * 10) / 10
+        };
+      }
+    }
+
     history.push(pruned);
     isochrone = pruned;
 
@@ -144,34 +172,33 @@ export async function calculateRoute(params) {
       log.push(`[Step ${step}] ROUTE FOUND — within ${arrivalThreshold.toFixed(1)}NM of destination`);
       log.push(`---`);
       log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
-      let rawNodes = collectRawNodes(closest);
-      let route = buildRoute(closest, history, headingThreshold);
 
-      if (constantSpeedKn && route.length > 1) {
-        const totalPathDist = route.reduce((s, l) => s + l.distance, 0);
-        if (totalPathDist > totalDist * 1.3 && !crossesLand(coastline, start, end, start, end, clearanceMarginNm)) {
-          const hdg = Math.round(bearing(start, end));
-          const duration = totalDist / constantSpeedKn;
-          route = [{
+      let finalNode = closest;
+      const distToDest = distanceNm(closest.point, end);
+      if (distToDest > 0.05) {
+        if (!crossesLand(coastline, closest.point, end, start, end, clearanceMarginNm)) {
+          const sog = closest.sog || constantSpeedKn || 0;
+          const hdg = bearing(closest.point, end);
+          const duration = sog > 0 ? distToDest / sog : 0;
+          finalNode = {
+            point: { ...end },
             heading: hdg,
-            waypoint: { ...start },
-            endWaypoint: { ...end },
-            duration,
-            distance: totalDist,
-            sog: constantSpeedKn,
-            windAngle: 0,
-            windSpeed: 0,
-            windDir: 0,
-            windDescription: 'calm',
-            maneuver: null,
-            tackSide: null
-          }];
-          rawNodes = [
-            { point: { ...start }, heading: null, time: departureTime, sog: 0, twa: 0, windSpeed: 0, windDir: 0, distToEnd: totalDist, parent: null },
-            { point: { ...end }, heading: hdg, time: addHours(departureTime, duration), sog: constantSpeedKn, twa: 0, windSpeed: 0, windDir: 0, distToEnd: 0, parent: null }
-          ];
+            parent: closest,
+            time: addHours(closest.time, duration),
+            distToEnd: 0,
+            sog,
+            twa: closest.twa,
+            windSpeed: closest.windSpeed,
+            windDir: closest.windDir
+          };
+          log.push(`Exact final leg appended to destination: ${distToDest.toFixed(2)}NM at ${Math.round(hdg)}°T`);
+        } else {
+          log.push(`WARNING: exact final leg (${distToDest.toFixed(2)}NM) crosses land/clearance — route ends at closest reachable point instead of destination`);
         }
       }
+
+      const rawNodes = collectRawNodes(finalNode);
+      const route = buildRoute(finalNode, history, headingThreshold);
 
       log.push(`Legs: ${route.length}`);
       for (let i = 0; i < route.length; i++) {
@@ -179,7 +206,16 @@ export async function calculateRoute(params) {
         const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
         log.push(`  Leg ${i + 1}: ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.distance.toFixed(1)}NM ${leg.duration.toFixed(1)}h wind ${leg.windSpeed}kn from ${leg.windDir}° ${leg.windDescription}`);
       }
-      return { route, rawNodes, log: log.join('\n') };
+      return { route, rawNodes, log: log.join('\n'), reachedEnd: true };
+    }
+
+    if (arriveByTime && new Date(closest.time).getTime() >= new Date(arriveByTime).getTime()) {
+      log.push(`[Step ${step}] ARRIVE-BY TIME REACHED — stopping expansion at ${closest.time}`);
+      log.push(`---`);
+      log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
+      const rawNodes = collectRawNodes(closest);
+      const route = buildRoute(closest, history, headingThreshold);
+      return { route, rawNodes, log: log.join('\n'), reachedEnd: false, endNode: closest };
     }
 
     if (Date.now() - lastYield > YIELD_INTERVAL_MS) {
@@ -249,7 +285,8 @@ function simplifyLegs(path, threshold) {
   let sogCount = 1;
   let totalTwa = path[firstRealIdx].twa;
   let totalWindSpeed = path[firstRealIdx].windSpeed;
-  let totalWindDir = path[firstRealIdx].windDir;
+  let sumWindDirX = Math.cos(toRad(path[firstRealIdx].windDir));
+  let sumWindDirY = Math.sin(toRad(path[firstRealIdx].windDir));
   let windCount = 1;
   let prevTwaSign = Math.sign(path[firstRealIdx].twa);
 
@@ -275,7 +312,8 @@ function simplifyLegs(path, threshold) {
           sogCount++;
           totalTwa += path[i].twa;
           totalWindSpeed += path[i].windSpeed;
-          totalWindDir += path[i].windDir;
+          sumWindDirX += Math.cos(toRad(path[i].windDir));
+          sumWindDirY += Math.sin(toRad(path[i].windDir));
           windCount++;
           continue;
         }
@@ -292,22 +330,22 @@ function simplifyLegs(path, threshold) {
         sog: avgSog,
         windAngle: Math.round(Math.abs(totalTwa / windCount)),
         windSpeed: Math.round(totalWindSpeed / windCount),
-        windDir: Math.round(totalWindDir / windCount),
+        windDir: Math.round(circularMeanDeg(sumWindDirX, sumWindDirY)),
         windDescription: describeWind(totalTwa / windCount),
         maneuver: null,
         tackSide: (totalTwa / windCount) > 0 ? 'port' : (totalTwa / windCount) < 0 ? 'starboard' : null
       });
 
       if (prevTwaSign !== 0 && newTwaSign !== 0 && prevTwaSign !== newTwaSign) {
-        const absAvgTwa = Math.abs(totalTwa / windCount);
-        const isTack = absAvgTwa <= 90;
+        const crossTwa = (Math.abs(path[i - 1].twa) + Math.abs(path[i].twa)) / 2;
+        const isTack = crossTwa < 90;
         const maneuver = isTack ? 'tack' : 'gybe';
         if (legs.length >= 1) {
           legs[legs.length - 1].maneuver = maneuver;
         }
         console.log('[Maneuver]', maneuver,
           `TWA sign ${prevTwaSign}→${newTwaSign}`,
-          `avgTwa ${(totalTwa / windCount).toFixed(1)}°`,
+          `crossTwa ${crossTwa.toFixed(1)}°`,
           `leg ${legs.length - 1} heading ${legs[legs.length - 1].heading}°`,
           `windDir ${legs[legs.length - 1].windDir}°`);
       }
@@ -318,7 +356,8 @@ function simplifyLegs(path, threshold) {
       sogCount = 1;
       totalTwa = path[i].twa;
       totalWindSpeed = path[i].windSpeed;
-      totalWindDir = path[i].windDir;
+      sumWindDirX = Math.cos(toRad(path[i].windDir));
+      sumWindDirY = Math.sin(toRad(path[i].windDir));
       windCount = 1;
       prevTwaSign = newTwaSign;
     } else {
@@ -327,7 +366,8 @@ function simplifyLegs(path, threshold) {
       sogCount++;
       totalTwa += path[i].twa;
       totalWindSpeed += path[i].windSpeed;
-      totalWindDir += path[i].windDir;
+      sumWindDirX += Math.cos(toRad(path[i].windDir));
+      sumWindDirY += Math.sin(toRad(path[i].windDir));
       windCount++;
     }
   }
@@ -347,7 +387,7 @@ function simplifyLegs(path, threshold) {
     sog: avgSog,
     windAngle: Math.round(Math.abs(avgTwa)),
     windSpeed: Math.round(totalWindSpeed / windCount),
-    windDir: Math.round(totalWindDir / windCount),
+    windDir: Math.round(circularMeanDeg(sumWindDirX, sumWindDirY)),
     windDescription: describeWind(avgTwa),
     maneuver: null,
     tackSide: avgTwa > 0 ? 'port' : avgTwa < 0 ? 'starboard' : null
@@ -388,6 +428,10 @@ function describeWind(twa) {
 
 function normalizeAngle(deg) {
   return ((deg % 360) + 360) % 360;
+}
+
+function circularMeanDeg(sumX, sumY) {
+  return ((Math.atan2(sumY, sumX) * 180 / Math.PI) + 360) % 360;
 }
 
 function addHours(time, hours) {

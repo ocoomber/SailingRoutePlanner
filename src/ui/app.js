@@ -1,17 +1,13 @@
 import { loadPolars } from '../core/polar.js';
 import { CoastlineManager } from '../data/coastline/index.js';
 import { calculateRoute } from '../core/router.js';
-import { fetchWindGrid } from '../services/wind.js';
-import { initMap, setStart, setEnd, drawRoute, clearAll, clearChartingTools, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug, drawCoarseOverlay, clearCoarseOverlay, drawTileGrid, clearTileGrid, drawTileStates, clearTileStates, drawCorridorOverlay, clearCorridorOverlay, drawRoughRoute, clearRoughRoute } from './map.js';
+import { planPassageForBrowser } from '../services/passage-service.js';
+import { initMap, setStart, setEnd, drawRoute, clearAll, clearChartingTools, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug, drawCoarseOverlay, clearCoarseOverlay, drawTileGrid, clearTileGrid, drawTileStates, clearTileStates } from './map.js';
 import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
 import { showResults, showError, hideResults, showLoading, hideLoading, showLog, hideLog } from './results.js';
 
 let polars = null;
 let coastlineManager = null;
-let roughRoute = null;
-let roughCorridor = null;
-
-const COARSE_CLEARANCE_NM = 2;
 
 async function loadData() {
   const calcBtn = document.getElementById('calculate-btn');
@@ -44,6 +40,18 @@ function onPointSelected(field, lat, lon) {
   setCoordinates(field, lat, lon);
 }
 
+async function runGeometryMode(start, end, inputs) {
+  return calculateRoute({
+    start, end,
+    departureTime: new Date().toISOString(),
+    coastline: coastlineManager.getCoarseCoastline(),
+    timeStepMinutes: inputs.timeStep,
+    headingThreshold: inputs.headingThreshold,
+    constantSpeedKn: 6,
+    clearanceMarginNm: inputs.clearanceMargin
+  });
+}
+
 async function onCalculate() {
   const inputs = getInputs();
   const errors = validateInputs(inputs);
@@ -71,82 +79,32 @@ async function onCalculate() {
     const start = { lat: inputs.startLat, lon: inputs.startLon };
     const end = { lat: inputs.endLat, lon: inputs.endLon };
 
-    const area = {
-      north: Math.max(start.lat, end.lat) + 0.5,
-      south: Math.min(start.lat, end.lat) - 0.5,
-      east: Math.max(start.lon, end.lon) + 0.5,
-      west: Math.min(start.lon, end.lon) - 0.5
-    };
-
     const targetTime = new Date(`${inputs.departureDate}T${inputs.departureTime}:00Z`);
+    let departureTime = inputs.timeMode === 'departure'
+      ? targetTime
+      : new Date(targetTime.getTime() - 48 * 3600000);
 
-    let departureTime;
+    let route, log, rawNodes;
 
-    if (inputs.timeMode === 'departure') {
-      departureTime = targetTime;
-    } else {
-      const arrivalTime = targetTime;
-      departureTime = new Date(arrivalTime.getTime() - 48 * 3600000);
-    }
-
-    const departureISO = departureTime.toISOString();
-    const endTime = new Date(departureTime.getTime() + 48 * 3600000).toISOString();
-
-    let windGrid = null;
-    if (!inputs.geometryMode) {
-      windGrid = await fetchWindGrid(area, departureISO, endTime);
-    }
-
-    const tidalCurrent = inputs.tidalEnabled ? parseTidalData(inputs.tidalData) : null;
-
-    const makeParams = (coastline, clearanceMarginNm) => ({
-      start,
-      end,
-      departureTime: departureISO,
-      coastline,
-      timeStepMinutes: inputs.timeStep,
-      headingThreshold: inputs.headingThreshold,
-      tidalCurrent,
-      clearanceMarginNm
-    });
-
-    const coarseParams = makeParams(coastlineManager.getCoarseCoastline(), Math.max(inputs.clearanceMargin, COARSE_CLEARANCE_NM));
     if (inputs.geometryMode) {
-      coarseParams.constantSpeedKn = 6;
+      const result = await runGeometryMode(start, end, inputs);
+      route = result.route;
+      log = result.log;
+      rawNodes = result.rawNodes;
     } else {
-      coarseParams.polars = polars;
-      coarseParams.windGrid = windGrid;
+      const tidalCurrent = inputs.tidalEnabled ? parseTidalData(inputs.tidalData) : null;
+      const passageResult = await planPassageForBrowser({
+        start, end,
+        departureTime: departureTime.toISOString(),
+        basePolars: polars,
+        coastlineManager,
+        routerOpts: { timeStepMinutes: inputs.timeStep, headingThreshold: inputs.headingThreshold, clearanceMarginNm: inputs.clearanceMargin }
+      });
+      route = passageResult.legs;
+      log = passageResult.debug.log;
+      rawNodes = passageResult.debug.rawNodes;
+      if (tidalCurrent) log += '\n(Tidal current input ignored — position-aware tidal modelling not yet built)';
     }
-
-    const coarseResult = await calculateRoute(coarseParams);
-    roughRoute = coarseResult;
-
-    if (coarseResult.route && coarseResult.route.length > 0) {
-      const waypoints = [];
-      for (const leg of coarseResult.route) {
-        waypoints.push(leg.waypoint);
-      }
-      const last = coarseResult.route[coarseResult.route.length - 1];
-      if (last.endWaypoint) waypoints.push(last.endWaypoint);
-
-      roughCorridor = buildCorridorPath(waypoints, 512, 3);
-
-      await coastlineManager.prepareFineTiles(waypoints, 5);
-    } else {
-      roughCorridor = null;
-    }
-
-    const smartCoastline = coastlineManager.getSmartCoastline() || coastlineManager.getCoarseCoastline();
-
-    const fineParams = makeParams(smartCoastline, inputs.clearanceMargin);
-    if (inputs.geometryMode) {
-      fineParams.constantSpeedKn = 6;
-    } else {
-      fineParams.polars = polars;
-      fineParams.windGrid = windGrid;
-    }
-
-    const { route, log } = await calculateRoute(fineParams);
 
     hideLoading();
     showLog(log);
@@ -163,9 +121,8 @@ async function onCalculate() {
 
     drawRoute(route);
     window.__lastRoute = route;
-    window.__roughRoute = coarseResult;
+    window.__lastRawNodes = rawNodes;
     window.__coastlineManager = coastlineManager;
-    window.__roughCorridor = roughCorridor;
     if (document.getElementById('show-sailing-debug').checked) {
       drawSailingDebug(route);
     }
@@ -176,38 +133,6 @@ async function onCalculate() {
     showError(err.message);
     console.error('Routing error:', err);
   }
-}
-
-function buildCorridorPath(waypoints, segments, marginNm) {
-  if (!waypoints || waypoints.length < 2) return null;
-
-  const marginDeg = marginNm / 60;
-  const path = [];
-
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const a = waypoints[i];
-    const b = waypoints[i + 1];
-    for (let t = 0; t <= 1; t += 1 / segments) {
-      const lat = a.lat + (b.lat - a.lat) * t;
-      const lon = a.lon + (b.lon - a.lon) * t;
-      const cosLat = Math.cos(lat * Math.PI / 180);
-      path.push({ lat: lat + marginDeg * cosLat, lon: lon + marginDeg });
-    }
-  }
-
-  for (let i = waypoints.length - 1; i > 0; i--) {
-    const a = waypoints[i];
-    const b = waypoints[i - 1];
-    for (let t = 0; t <= 1; t += 1 / segments) {
-      const lat = a.lat + (b.lat - a.lat) * t;
-      const lon = a.lon + (b.lon - a.lon) * t;
-      const cosLat = Math.cos(lat * Math.PI / 180);
-      path.push({ lat: lat - marginDeg * cosLat, lon: lon - marginDeg });
-    }
-  }
-
-  path.push(path[0]);
-  return path;
 }
 
 function refreshDebugOverlays() {
@@ -233,20 +158,6 @@ function refreshDebugOverlays() {
     clearTileStates();
   }
 
-  const showCorridor = document.getElementById('show-corridor');
-  if (showCorridor && showCorridor.checked && roughCorridor) {
-    drawCorridorOverlay(roughCorridor);
-  } else {
-    clearCorridorOverlay();
-  }
-
-  const showRough = document.getElementById('show-rough-route');
-  if (showRough && showRough.checked && roughRoute && roughRoute.route) {
-    drawRoughRoute(roughRoute.route);
-  } else {
-    clearRoughRoute();
-  }
-
   const showLand = document.getElementById('show-land-overlay');
   if (showLand && showLand.checked && coastlineManager) {
     const smart = coastlineManager.getSmartCoastline();
@@ -262,11 +173,8 @@ function onClear() {
   hideResults();
   hideLog();
   window.__lastRoute = null;
-  window.__roughRoute = null;
+  window.__lastRawNodes = null;
   window.__coastlineManager = null;
-  window.__roughCorridor = null;
-  roughRoute = null;
-  roughCorridor = null;
   document.getElementById('start-lat').value = '';
   document.getElementById('start-lon').value = '';
   document.getElementById('end-lat').value = '';
@@ -294,14 +202,6 @@ async function init() {
   });
 
   document.getElementById('show-tile-states').addEventListener('change', () => {
-    refreshDebugOverlays();
-  });
-
-  document.getElementById('show-corridor').addEventListener('change', () => {
-    refreshDebugOverlays();
-  });
-
-  document.getElementById('show-rough-route').addEventListener('change', () => {
     refreshDebugOverlays();
   });
 

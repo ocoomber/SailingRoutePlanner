@@ -6,6 +6,8 @@ import { loadPolars } from '../src/core/polar.js';
 import { loadCoastline } from '../src/core/coastline.js';
 import { analyzeRoute } from '../src/core/decision-logger.js';
 import { narrateRoute } from '../src/core/explain.js';
+import { interpolateWind } from '../src/core/wind-interpolation.js';
+import { distanceNm } from '../src/core/geometry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_DIR = join(__dirname, '..', 'src', 'data', 'test-fixtures');
@@ -90,6 +92,14 @@ async function runScenario(sc) {
     }
   }
 
+  const lastLeg = result.route[result.route.length - 1];
+  const endGap = distanceNm(lastLeg.endWaypoint, sc.end);
+  if (endGap > 0.05) {
+    console.log(`FAIL [${elapsed}ms]: ${sc.name}`);
+    console.log(`  Final leg endWaypoint ${endGap.toFixed(3)}NM from destination, expected <= 0.05NM (exact final leg)`);
+    return { pass: false };
+  }
+
   console.log(`\n=== ${sc.name} [${elapsed}ms] ===`);
   console.log(`  ${sc.description}`);
   console.log(narrateRoute(rawNodes, result.route, decisions));
@@ -143,6 +153,49 @@ async function testNoFalseManeuver() {
   return pass;
 }
 
+async function testCircularWindMean() {
+  const path = [
+    { heading: null, twa: 0, windDir: 350, windSpeed: 14, point: { lat: 50.0, lon: -3.5 }, time: '2026-07-16T12:00:00.000Z', sog: 0, distToEnd: 50 },
+    { heading: 230, twa: 94, windDir: 350, windSpeed: 14, point: { lat: 50.04, lon: -3.48 }, time: '2026-07-16T12:30:00.000Z', sog: 6.5, distToEnd: 48 },
+    { heading: 230, twa: 94, windDir: 10, windSpeed: 14, point: { lat: 50.08, lon: -3.46 }, time: '2026-07-16T13:00:00.000Z', sog: 6.5, distToEnd: 46 },
+  ];
+
+  const legs = simplifyLegs(path, 15);
+  const pass = legs.length === 1 && Math.abs(normalizeSigned(legs[0].windDir)) < 1;
+
+  console.log(`\n=== Circular mean wind direction ===`);
+  if (pass) {
+    console.log(`  PASS: windDir ${legs[0].windDir}° (350°/10° averages to ~0°, not ~180°)`);
+  } else {
+    console.log(`  FAIL: windDir ${legs[0] ? legs[0].windDir : 'n/a'}°, expected ~0°`);
+  }
+  return pass;
+}
+
+function normalizeSigned(deg) {
+  return ((deg + 180) % 360 + 360) % 360 - 180;
+}
+
+function testWindTimeInterpolation() {
+  const windGrid = {
+    grid: [
+      { time: '2026-07-16T12:00:00.000Z', points: [{ lat: 50, lon: -3, speed: 10, direction: 350 }] },
+      { time: '2026-07-16T13:00:00.000Z', points: [{ lat: 50, lon: -3, speed: 20, direction: 10 }] }
+    ]
+  };
+
+  const wind = interpolateWind(windGrid, 50, -3, '2026-07-16T12:30:00.000Z');
+  const pass = Math.abs(wind.speed - 15) < 0.01 && Math.abs(normalizeSigned(wind.direction)) < 0.01;
+
+  console.log(`\n=== Wind time interpolation ===`);
+  if (pass) {
+    console.log(`  PASS: :30 query -> ${wind.speed.toFixed(1)}kn ${wind.direction.toFixed(1)}° (expected 15kn/0°)`);
+  } else {
+    console.log(`  FAIL: :30 query -> ${wind.speed.toFixed(1)}kn ${wind.direction.toFixed(1)}° (expected 15kn/0°)`);
+  }
+  return pass;
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -154,5 +207,11 @@ for (const sc of scenarios) {
 const edgePass = await testNoFalseManeuver();
 if (edgePass) passed++; else failed++;
 
-console.log(`\n${passed} passed, ${failed} failed out of ${scenarios.length + 1} tests (${scenarios.length} scenarios + 1 edge case)`);
+const circularMeanPass = await testCircularWindMean();
+if (circularMeanPass) passed++; else failed++;
+
+const windInterpPass = testWindTimeInterpolation();
+if (windInterpPass) passed++; else failed++;
+
+console.log(`\n${passed} passed, ${failed} failed out of ${scenarios.length + 3} tests (${scenarios.length} scenarios + 3 edge cases)`);
 process.exit(failed > 0 ? 1 : 0);
