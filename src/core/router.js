@@ -1,6 +1,6 @@
 import { distanceNm, bearing, destination, addVectors } from './geometry.js';
 import { lookupSpeed } from './polar.js';
-import { crossesLand } from './coastline.js';
+import { crossesLand } from '../data/coastline/index.js';
 import { interpolateWind } from './wind-interpolation.js';
 
 const DEFAULT_HEADINGS = 36;

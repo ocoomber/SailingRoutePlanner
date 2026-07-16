@@ -373,6 +373,43 @@ textarea {
   font-weight: 500;
 }
 
+.debug-section {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.debug-section summary {
+  cursor: pointer;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0;
+}
+
+.debug-section summary:hover {
+  color: var(--color-text);
+}
+
+.debug-section .input-row {
+  padding-left: 0.5rem;
+}
+
+.tile-label {
+  background: none !important;
+  border: none !important;
+  font-size: 9px;
+  color: #6b7280;
+  font-family: monospace;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tile-state-label {
+  background: none !important;
+  border: none !important;
+}
+
 #debug-log {
   margin-top: 0.75rem;
 }

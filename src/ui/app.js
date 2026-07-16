@@ -1,13 +1,17 @@
 import { loadPolars } from '../core/polar.js';
-import { loadCoastline } from '../core/coastline.js';
+import { CoastlineManager } from '../data/coastline/index.js';
 import { calculateRoute } from '../core/router.js';
 import { fetchWindGrid } from '../services/wind.js';
-import { initMap, setStart, setEnd, drawRoute, clearAll, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug } from './map.js';
+import { initMap, setStart, setEnd, drawRoute, clearAll, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug, drawCoarseOverlay, clearCoarseOverlay, drawTileGrid, clearTileGrid, drawTileStates, clearTileStates, drawCorridorOverlay, clearCorridorOverlay, drawRoughRoute, clearRoughRoute } from './map.js';
 import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
 import { showResults, showError, hideResults, showLoading, hideLoading, showLog, hideLog } from './results.js';
 
 let polars = null;
-let coastline = null;
+let coastlineManager = null;
+let roughRoute = null;
+let roughCorridor = null;
+
+const COARSE_CLEARANCE_NM = 2;
 
 async function loadData() {
   const calcBtn = document.getElementById('calculate-btn');
@@ -15,19 +19,21 @@ async function loadData() {
   calcBtn.textContent = 'Loading data...';
 
   try {
-    const [polarsResp, coastResp] = await Promise.all([
+    const [polarsResp, coarseResp] = await Promise.all([
       fetch('src/data/polars/oceanis393.json'),
-      fetch('src/data/coastlines/sw-england.json')
+      fetch('src/data/coastline/sw-england-coarse.json')
     ]);
 
     if (!polarsResp.ok) throw new Error('Failed to load polar data');
-    if (!coastResp.ok) throw new Error('Failed to load coastline data');
+    if (!coarseResp.ok) throw new Error('Failed to load coastline data');
 
     const polarsJson = await polarsResp.json();
-    const coastJson = await coastResp.json();
+    const coarseJson = await coarseResp.json();
 
     polars = loadPolars(polarsJson);
-    coastline = loadCoastline(coastJson);
+
+    coastlineManager = new CoastlineManager();
+    await coastlineManager.init(coarseJson);
   } finally {
     calcBtn.disabled = false;
     calcBtn.textContent = 'Calculate Route';
@@ -47,7 +53,7 @@ async function onCalculate() {
     return;
   }
 
-  if (!coastline) {
+  if (!coastlineManager) {
     showError('Data not loaded yet. Please wait a moment.');
     return;
   }
@@ -75,19 +81,16 @@ async function onCalculate() {
     const targetTime = new Date(`${inputs.departureDate}T${inputs.departureTime}:00Z`);
 
     let departureTime;
-    let arrivalTime;
 
     if (inputs.timeMode === 'departure') {
       departureTime = targetTime;
     } else {
-      arrivalTime = targetTime;
-      departureTime = new Date(targetTime.getTime() - 48 * 3600000);
+      const arrivalTime = targetTime;
+      departureTime = new Date(arrivalTime.getTime() - 48 * 3600000);
     }
 
     const departureISO = departureTime.toISOString();
-    const endTime = arrivalTime
-      ? arrivalTime.toISOString()
-      : new Date(departureTime.getTime() + 48 * 3600000).toISOString();
+    const endTime = new Date(departureTime.getTime() + 48 * 3600000).toISOString();
 
     let windGrid = null;
     if (!inputs.geometryMode) {
@@ -96,7 +99,7 @@ async function onCalculate() {
 
     const tidalCurrent = inputs.tidalEnabled ? parseTidalData(inputs.tidalData) : null;
 
-    const routeParams = {
+    const makeParams = (coastline, clearanceMarginNm) => ({
       start,
       end,
       departureTime: departureISO,
@@ -104,17 +107,46 @@ async function onCalculate() {
       timeStepMinutes: inputs.timeStep,
       headingThreshold: inputs.headingThreshold,
       tidalCurrent,
-      clearanceMarginNm: inputs.clearanceMargin
-    };
+      clearanceMarginNm
+    });
 
+    const coarseParams = makeParams(coastlineManager.getCoarseCoastline(), Math.max(inputs.clearanceMargin, COARSE_CLEARANCE_NM));
     if (inputs.geometryMode) {
-      routeParams.constantSpeedKn = 6;
+      coarseParams.constantSpeedKn = 6;
     } else {
-      routeParams.polars = polars;
-      routeParams.windGrid = windGrid;
+      coarseParams.polars = polars;
+      coarseParams.windGrid = windGrid;
     }
 
-    const { route, log } = await calculateRoute(routeParams);
+    const coarseResult = await calculateRoute(coarseParams);
+    roughRoute = coarseResult;
+
+    if (coarseResult.route && coarseResult.route.length > 0) {
+      const waypoints = [];
+      for (const leg of coarseResult.route) {
+        waypoints.push(leg.waypoint);
+      }
+      const last = coarseResult.route[coarseResult.route.length - 1];
+      if (last.endWaypoint) waypoints.push(last.endWaypoint);
+
+      roughCorridor = buildCorridorPath(waypoints, 512, 3);
+
+      await coastlineManager.prepareFineTiles(waypoints, 5);
+    } else {
+      roughCorridor = null;
+    }
+
+    const smartCoastline = coastlineManager.getSmartCoastline() || coastlineManager.getCoarseCoastline();
+
+    const fineParams = makeParams(smartCoastline, inputs.clearanceMargin);
+    if (inputs.geometryMode) {
+      fineParams.constantSpeedKn = 6;
+    } else {
+      fineParams.polars = polars;
+      fineParams.windGrid = windGrid;
+    }
+
+    const { route, log } = await calculateRoute(fineParams);
 
     hideLoading();
     showLog(log);
@@ -126,19 +158,101 @@ async function onCalculate() {
 
     const totalTime = route.reduce((sum, l) => sum + l.duration, 0);
     const computedDeparture = inputs.timeMode === 'arrival'
-      ? new Date(arrivalTime.getTime() - totalTime * 3600000)
+      ? new Date(targetTime.getTime() - totalTime * 3600000)
       : null;
 
     drawRoute(route);
     window.__lastRoute = route;
+    window.__roughRoute = coarseResult;
+    window.__coastlineManager = coastlineManager;
+    window.__roughCorridor = roughCorridor;
     if (document.getElementById('show-sailing-debug').checked) {
       drawSailingDebug(route);
     }
     showResults(route, totalTime, inputs.timeMode, computedDeparture, targetTime);
+    refreshDebugOverlays();
   } catch (err) {
     hideLoading();
     showError(err.message);
     console.error('Routing error:', err);
+  }
+}
+
+function buildCorridorPath(waypoints, segments, marginNm) {
+  if (!waypoints || waypoints.length < 2) return null;
+
+  const marginDeg = marginNm / 60;
+  const path = [];
+
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i];
+    const b = waypoints[i + 1];
+    for (let t = 0; t <= 1; t += 1 / segments) {
+      const lat = a.lat + (b.lat - a.lat) * t;
+      const lon = a.lon + (b.lon - a.lon) * t;
+      const cosLat = Math.cos(lat * Math.PI / 180);
+      path.push({ lat: lat + marginDeg * cosLat, lon: lon + marginDeg });
+    }
+  }
+
+  for (let i = waypoints.length - 1; i > 0; i--) {
+    const a = waypoints[i];
+    const b = waypoints[i - 1];
+    for (let t = 0; t <= 1; t += 1 / segments) {
+      const lat = a.lat + (b.lat - a.lat) * t;
+      const lon = a.lon + (b.lon - a.lon) * t;
+      const cosLat = Math.cos(lat * Math.PI / 180);
+      path.push({ lat: lat - marginDeg * cosLat, lon: lon - marginDeg });
+    }
+  }
+
+  path.push(path[0]);
+  return path;
+}
+
+function refreshDebugOverlays() {
+  const showCoarse = document.getElementById('show-coarse-overlay');
+  if (showCoarse && showCoarse.checked && coastlineManager) {
+    drawCoarseOverlay(coastlineManager.getCoarseCoastline());
+  } else {
+    clearCoarseOverlay();
+  }
+
+  const showTileGrid = document.getElementById('show-tile-grid');
+  if (showTileGrid && showTileGrid.checked) {
+    const zoom = coastlineManager ? coastlineManager.tileZoom : 12;
+    drawTileGrid(zoom);
+  } else {
+    clearTileGrid();
+  }
+
+  const showTileStates = document.getElementById('show-tile-states');
+  if (showTileStates && showTileStates.checked && coastlineManager) {
+    drawTileStates(coastlineManager, coastlineManager.getTileStateMap());
+  } else {
+    clearTileStates();
+  }
+
+  const showCorridor = document.getElementById('show-corridor');
+  if (showCorridor && showCorridor.checked && roughCorridor) {
+    drawCorridorOverlay(roughCorridor);
+  } else {
+    clearCorridorOverlay();
+  }
+
+  const showRough = document.getElementById('show-rough-route');
+  if (showRough && showRough.checked && roughRoute && roughRoute.route) {
+    drawRoughRoute(roughRoute.route);
+  } else {
+    clearRoughRoute();
+  }
+
+  const showLand = document.getElementById('show-land-overlay');
+  if (showLand && showLand.checked && coastlineManager) {
+    const smart = coastlineManager.getSmartCoastline();
+    drawLandOverlay(smart || coastlineManager.getCoarseCoastline());
+  } else {
+    clearLandOverlay();
   }
 }
 
@@ -147,6 +261,11 @@ function onClear() {
   hideResults();
   hideLog();
   window.__lastRoute = null;
+  window.__roughRoute = null;
+  window.__coastlineManager = null;
+  window.__roughCorridor = null;
+  roughRoute = null;
+  roughCorridor = null;
   document.getElementById('start-lat').value = '';
   document.getElementById('start-lon').value = '';
   document.getElementById('end-lat').value = '';
@@ -161,13 +280,28 @@ async function init() {
   document.getElementById('calculate-btn').addEventListener('click', onCalculate);
   document.getElementById('clear-btn').addEventListener('click', onClear);
 
-  document.getElementById('show-land-overlay').addEventListener('change', (e) => {
-    if (!coastline) return;
-    if (e.target.checked) {
-      drawLandOverlay(coastline);
-    } else {
-      clearLandOverlay();
-    }
+  document.getElementById('show-land-overlay').addEventListener('change', () => {
+    refreshDebugOverlays();
+  });
+
+  document.getElementById('show-coarse-overlay').addEventListener('change', () => {
+    refreshDebugOverlays();
+  });
+
+  document.getElementById('show-tile-grid').addEventListener('change', () => {
+    refreshDebugOverlays();
+  });
+
+  document.getElementById('show-tile-states').addEventListener('change', () => {
+    refreshDebugOverlays();
+  });
+
+  document.getElementById('show-corridor').addEventListener('change', () => {
+    refreshDebugOverlays();
+  });
+
+  document.getElementById('show-rough-route').addEventListener('change', () => {
+    refreshDebugOverlays();
   });
 
   document.getElementById('show-sailing-debug').addEventListener('change', (e) => {
