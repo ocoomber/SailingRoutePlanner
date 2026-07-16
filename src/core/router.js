@@ -125,8 +125,34 @@ export function calculateRoute(params) {
       log.push(`[Step ${step}] ROUTE FOUND — within ${arrivalThreshold.toFixed(1)}NM of destination`);
       log.push(`---`);
       log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
-      const rawNodes = collectRawNodes(closest);
-      const route = buildRoute(closest, history, headingThreshold);
+      let rawNodes = collectRawNodes(closest);
+      let route = buildRoute(closest, history, headingThreshold);
+
+      if (constantSpeedKn && route.length > 1) {
+        const totalPathDist = route.reduce((s, l) => s + l.distance, 0);
+        if (totalPathDist > totalDist * 1.3 && !crossesLand(coastline, start, end, start, end)) {
+          const hdg = Math.round(bearing(start, end));
+          const duration = totalDist / constantSpeedKn;
+          route = [{
+            heading: hdg,
+            waypoint: { ...start },
+            endWaypoint: { ...end },
+            duration,
+            distance: totalDist,
+            sog: constantSpeedKn,
+            windAngle: 0,
+            windSpeed: 0,
+            windDir: 0,
+            windDescription: 'calm',
+            maneuver: null
+          }];
+          rawNodes = [
+            { point: { ...start }, heading: null, time: departureTime, sog: 0, twa: 0, windSpeed: 0, windDir: 0, distToEnd: totalDist, parent: null },
+            { point: { ...end }, heading: hdg, time: addHours(departureTime, duration), sog: constantSpeedKn, twa: 0, windSpeed: 0, windDir: 0, distToEnd: 0, parent: null }
+          ];
+        }
+      }
+
       log.push(`Legs: ${route.length}`);
       for (let i = 0; i < route.length; i++) {
         const leg = route[i];
