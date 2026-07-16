@@ -140,19 +140,32 @@ function drawWindArrows(legs) {
     const midLat = (leg.waypoint.lat + leg.endWaypoint.lat) / 2;
     const midLon = (leg.waypoint.lon + leg.endWaypoint.lon) / 2;
 
-    const arrowLen = 0.02;
-    const windRad = (leg.windDir + 180) * Math.PI / 180;
-    const tipLat = midLat + arrowLen * Math.cos(windRad);
-    const tipLon = midLon + arrowLen * Math.sin(windRad);
+    const legHeadingRad = leg.heading * Math.PI / 180;
+    const windFromRad = leg.windDir * Math.PI / 180;
+
+    let relWind = windFromRad - legHeadingRad;
+    if (relWind > Math.PI) relWind -= 2 * Math.PI;
+    if (relWind < -Math.PI) relWind += 2 * Math.PI;
+    const starboard = relWind >= 0;
+
+    const perpRad = starboard ? legHeadingRad + Math.PI / 2 : legHeadingRad - Math.PI / 2;
+    const offsetDist = 0.008;
+    const centerLat = midLat + offsetDist * Math.cos(perpRad);
+    const centerLon = midLon + offsetDist * Math.sin(perpRad);
+
+    const arrowLen = 0.01;
+    const windToRad = windFromRad + Math.PI;
+    const tipLat = centerLat + arrowLen * Math.cos(windToRad);
+    const tipLon = centerLon + arrowLen * Math.sin(windToRad);
 
     const line = L.polyline(
-      [[midLat, midLon], [tipLat, tipLon]],
+      [[centerLat, centerLon], [tipLat, tipLon]],
       { color: '#6b21a8', weight: 1.5, opacity: 0.8 }
     ).addTo(map);
 
     const headLen = 0.005;
-    const headAng1 = windRad + 2.6;
-    const headAng2 = windRad - 2.6;
+    const headAng1 = windToRad + 2.6;
+    const headAng2 = windToRad - 2.6;
     const head1 = [tipLat + headLen * Math.cos(headAng1), tipLon + headLen * Math.sin(headAng1)];
     const head2 = [tipLat + headLen * Math.cos(headAng2), tipLon + headLen * Math.sin(headAng2)];
 
