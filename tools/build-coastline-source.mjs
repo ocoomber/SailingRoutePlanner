@@ -2,6 +2,7 @@ import { writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import * as shapefile from 'shapefile';
+import polygonClipping from 'polygon-clipping';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -9,25 +10,44 @@ const ROOT = join(__dirname, '..');
 const USAGE = `
 Usage: node tools/build-coastline-source.mjs <path-to-land-polygons.shp>
 
-Input: the WGS84 "split" land-polygons shapefile from
+Input: the WGS84 "complete" (NOT "split") land-polygons shapefile from
   https://osmdata.openstreetmap.de/data/land-polygons.html
-  (download "land-polygons-split-4326", unzip it, pass the .shp path here
-  — the matching .dbf/.shx files must sit alongside it)
+  (download "land-polygons-complete-4326", unzip it, pass the .shp path
+  here — the matching .dbf/.shx files must sit alongside it)
 
-This is a ~700MB download; fetching it automatically is not done here —
-download it yourself and pass the local path. A good place to keep it
-is tools/data/ (gitignored).
+Use "complete", not "split": the split variant pre-tiles landmasses on
+its own internal 1-degree grid, and wherever a landmass crosses one of
+those internal tile boundaries the split tool leaves a straight bridge
+edge along the seam — confirmed by inspection (nearly every long fake
+edge sat exactly on a round-degree line). "complete" has one genuine,
+correctly-closed polygon per landmass with no internal seams.
+
+This is a ~700MB-1.3GB download; fetching it automatically is not done
+here — download it yourself and pass the local path. A good place to
+keep it is tools/data/ (gitignored).
 
 Output: src/data/coastlines/sw-england.json, clipped to the bbox
-  lat 49.0-51.5, lon -7.0 to -2.0, lightly simplified (~56m tolerance —
-  well below any clearance margin this router ever checks) to keep the
-  spatial index usable against raw OSM's meter-scale vertex density, in
-  the existing {segments, outerRings, innerRings, source} shape.
+  lat 49.0-51.5, lon -7.0 to -2.0 using the polygon-clipping package
+  (a real polygon-boolean library implementing Martinez-Rueda), not
+  hand-rolled Sutherland-Hodgman and not @turf/bbox-clip (also
+  Sutherland-Hodgman under the hood — verified both produce the same
+  bogus bridge-edge artifact for a concave ring that splits into
+  disjoint pieces at the clip boundary; polygon-clipping correctly
+  returns each piece as its own separate ring instead). Rings are then
+  lightly simplified (~56m tolerance — well below any clearance margin
+  this router ever checks) to keep the spatial index usable against
+  raw OSM's meter-scale vertex density, in the existing
+  {segments, outerRings, innerRings, source} shape.
 `;
 
 const BBOX = { south: 49.0, north: 51.5, west: -7.0, east: -2.0 };
+const CLIP_WINDOW = [[[
+  [BBOX.west, BBOX.south], [BBOX.east, BBOX.south],
+  [BBOX.east, BBOX.north], [BBOX.west, BBOX.north],
+  [BBOX.west, BBOX.south]
+]]];
 
-function bboxIntersects(ring, bbox) {
+function bboxIntersectsRaw(ring, bbox) {
   let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
   for (const [lon, lat] of ring) {
     if (lat < minLat) minLat = lat;
@@ -36,50 +56,6 @@ function bboxIntersects(ring, bbox) {
     if (lon > maxLon) maxLon = lon;
   }
   return maxLat >= bbox.south && minLat <= bbox.north && maxLon >= bbox.west && minLon <= bbox.east;
-}
-
-function toPoints(ring) {
-  const points = ring.map(([lon, lat]) => ({ lat, lon }));
-  const first = points[0];
-  const last = points[points.length - 1];
-  if (first.lat === last.lat && first.lon === last.lon) points.pop();
-  return points;
-}
-
-function intersectVertical(a, b, lon) {
-  const t = (lon - a.lon) / (b.lon - a.lon);
-  return { lat: a.lat + t * (b.lat - a.lat), lon };
-}
-
-function intersectHorizontal(a, b, lat) {
-  const t = (lat - a.lat) / (b.lat - a.lat);
-  return { lat, lon: a.lon + t * (b.lon - a.lon) };
-}
-
-function clipEdge(points, inside, intersect) {
-  const result = [];
-  for (let i = 0; i < points.length; i++) {
-    const current = points[i];
-    const prev = points[(i - 1 + points.length) % points.length];
-    const currentIn = inside(current);
-    const prevIn = inside(prev);
-    if (currentIn) {
-      if (!prevIn) result.push(intersect(prev, current));
-      result.push(current);
-    } else if (prevIn) {
-      result.push(intersect(prev, current));
-    }
-  }
-  return result;
-}
-
-function clipRingToBbox(points, bbox) {
-  let clipped = points;
-  clipped = clipEdge(clipped, p => p.lon >= bbox.west, (a, b) => intersectVertical(a, b, bbox.west));
-  clipped = clipEdge(clipped, p => p.lon <= bbox.east, (a, b) => intersectVertical(a, b, bbox.east));
-  clipped = clipEdge(clipped, p => p.lat >= bbox.south, (a, b) => intersectHorizontal(a, b, bbox.south));
-  clipped = clipEdge(clipped, p => p.lat <= bbox.north, (a, b) => intersectHorizontal(a, b, bbox.north));
-  return clipped;
 }
 
 const LIGHT_SIMPLIFY_EPSILON_DEG = 0.0005;
@@ -118,6 +94,14 @@ function lightSimplify(ring) {
   return simplified.length < 3 ? ring : simplified;
 }
 
+function toPoints(coords) {
+  const points = coords.map(([lon, lat]) => ({ lat, lon }));
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (first.lat === last.lat && first.lon === last.lon) points.pop();
+  return points;
+}
+
 function ringToSegments(ring) {
   const segs = [];
   for (let i = 0; i < ring.length - 1; i++) {
@@ -127,10 +111,36 @@ function ringToSegments(ring) {
   return segs;
 }
 
-function polygonsFromGeometry(geometry) {
+function geometryToMultiPolygonCoords(geometry) {
   if (geometry.type === 'Polygon') return [geometry.coordinates];
   if (geometry.type === 'MultiPolygon') return geometry.coordinates;
   return [];
+}
+
+function pointsToClosedCoords(points) {
+  const coords = points.map(p => [p.lon, p.lat]);
+  coords.push(coords[0]);
+  return coords;
+}
+
+const SEGMENT_KEEP_BUFFER_DEG = 1.0;
+const MAX_CONTAINMENT_RING_POINTS = 5000;
+
+function pointNearBbox(p, bbox, buffer) {
+  return p.lat >= bbox.south - buffer && p.lat <= bbox.north + buffer &&
+    p.lon >= bbox.west - buffer && p.lon <= bbox.east + buffer;
+}
+
+function relevantSegmentsFromRing(ring, bbox, buffer) {
+  const segs = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    if (pointNearBbox(a, bbox, buffer) || pointNearBbox(b, bbox, buffer)) {
+      segs.push({ a, b });
+    }
+  }
+  return segs;
 }
 
 async function main() {
@@ -142,26 +152,57 @@ async function main() {
 
   const outerRings = [];
   const innerRings = [];
+  const segments = [];
   let featuresSeen = 0;
   let ringsKept = 0;
+  let fallbackCount = 0;
+  let oversizedRingsSkipped = 0;
 
   const source = await shapefile.open(shpPath);
   let result = await source.read();
 
   while (!result.done) {
     featuresSeen++;
-    const polygons = polygonsFromGeometry(result.value.geometry || {});
+    const geometry = result.value.geometry;
 
-    for (const rings of polygons) {
-      for (let i = 0; i < rings.length; i++) {
-        const rawRing = rings[i];
-        if (!bboxIntersects(rawRing, BBOX)) continue;
+    if (geometry && (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon')) {
+      const rawPolygons = geometryToMultiPolygonCoords(geometry);
+      const touchesBbox = rawPolygons.some(polygon => bboxIntersectsRaw(polygon[0], BBOX));
 
-        const clipped = clipRingToBbox(toPoints(rawRing), BBOX);
-        if (clipped.length < 3) continue;
+      if (touchesBbox) {
+        const presimplified = rawPolygons.map(polygon =>
+          polygon.map(ring => lightSimplify(toPoints(ring)))
+        );
 
-        (i === 0 ? outerRings : innerRings).push(lightSimplify(clipped));
-        ringsKept++;
+        try {
+          const clipInput = presimplified.map(polygon => polygon.map(pointsToClosedCoords));
+          const clipped = polygonClipping.intersection(clipInput, CLIP_WINDOW);
+
+          for (const polygon of clipped) {
+            for (let i = 0; i < polygon.length; i++) {
+              const points = toPoints(polygon[i]);
+              if (points.length < 3) continue;
+              (i === 0 ? outerRings : innerRings).push(points);
+              segments.push(...ringToSegments(points));
+              ringsKept++;
+            }
+          }
+        } catch (err) {
+          fallbackCount++;
+          for (const polygon of presimplified) {
+            for (let i = 0; i < polygon.length; i++) {
+              const ring = polygon[i];
+              if (ring.length < 3) continue;
+              segments.push(...relevantSegmentsFromRing(ring, BBOX, SEGMENT_KEEP_BUFFER_DEG));
+              ringsKept++;
+              if (ring.length > MAX_CONTAINMENT_RING_POINTS) {
+                oversizedRingsSkipped++;
+                continue;
+              }
+              (i === 0 ? outerRings : innerRings).push(ring);
+            }
+          }
+        }
       }
     }
 
@@ -171,10 +212,6 @@ async function main() {
 
     result = await source.read();
   }
-
-  const segments = [];
-  for (const ring of outerRings) segments.push(...ringToSegments(ring));
-  for (const ring of innerRings) segments.push(...ringToSegments(ring));
 
   const output = {
     segments,
@@ -188,6 +225,12 @@ async function main() {
 
   console.log(`Scanned ${featuresSeen} shapefile features.`);
   console.log(`Kept ${outerRings.length} outer rings, ${innerRings.length} inner rings, ${segments.length} segments.`);
+  if (fallbackCount > 0) {
+    console.log(`${fallbackCount} feature(s) fell back to whole-ring (unclipped) handling — the clipping library failed on them, likely due to size/complexity (e.g. a whole connected continent's coastline in one ring). Their nearby segments are still kept for line-crossing detection.`);
+  }
+  if (oversizedRingsSkipped > 0) {
+    console.log(`${oversizedRingsSkipped} fallback ring(s) exceeded ${MAX_CONTAINMENT_RING_POINTS} points and were excluded from point-in-polygon containment checks (too slow to be worth it as a rarely-needed fallback) — their segments are still kept.`);
+  }
   console.log(`Written to ${outPath}`);
   console.log(`Next: run tools/simplify-coastline.mjs and tools/generate-tiles.mjs against the new source.`);
 }

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import polygonClipping from 'polygon-clipping';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -70,16 +71,57 @@ function ringToSegments(ring) {
   return segs;
 }
 
+const BBOX = { south: 49.0, north: 51.5, west: -7.0, east: -2.0 };
+const CLIP_WINDOW = [[[
+  [BBOX.west, BBOX.south], [BBOX.east, BBOX.south],
+  [BBOX.east, BBOX.north], [BBOX.west, BBOX.north],
+  [BBOX.west, BBOX.south]
+]]];
+
+function toClipCoords(ring) {
+  const coords = ring.map(p => [p.lon, p.lat]);
+  coords.push(coords[0]);
+  return coords;
+}
+
+function fromClipCoords(coords) {
+  const points = coords.map(([lon, lat]) => ({ lat, lon }));
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (first.lat === last.lat && first.lon === last.lon) points.pop();
+  return points;
+}
+
+function clipToBboxForCoarseLayer(ring) {
+  try {
+    const clipped = polygonClipping.intersection([[toClipCoords(ring)]], CLIP_WINDOW);
+    return clipped.map(polygon => fromClipCoords(polygon[0])).filter(r => r.length >= 3);
+  } catch {
+    return [ring];
+  }
+}
+
 const raw = JSON.parse(readFileSync(join(ROOT, 'src/data/coastlines/sw-england.json'), 'utf-8'));
 
 const EPSILON = 0.02;
 const MIN_RING_DIAGONAL_NM = 2;
+const CLIP_RING_ABOVE_POINTS = 500;
 
 const outerRingsForCoarse = raw.outerRings.filter(r => bboxDiagonalNm(r) >= MIN_RING_DIAGONAL_NM);
 const innerRingsForCoarse = raw.innerRings.filter(r => bboxDiagonalNm(r) >= MIN_RING_DIAGONAL_NM);
 
-const simplifiedOuterRings = outerRingsForCoarse.map(r => simplifyRing(r, EPSILON));
-const simplifiedInnerRings = innerRingsForCoarse.map(r => simplifyRing(r, EPSILON));
+function simplifyAndClip(rings) {
+  const out = [];
+  for (const ring of rings) {
+    const simplified = simplifyRing(ring, EPSILON);
+    const pieces = simplified.length > CLIP_RING_ABOVE_POINTS ? clipToBboxForCoarseLayer(simplified) : [simplified];
+    out.push(...pieces);
+  }
+  return out;
+}
+
+const simplifiedOuterRings = simplifyAndClip(outerRingsForCoarse);
+const simplifiedInnerRings = simplifyAndClip(innerRingsForCoarse);
 
 const coarseSegments = [];
 for (const ring of simplifiedOuterRings) {
