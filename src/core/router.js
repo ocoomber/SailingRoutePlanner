@@ -144,8 +144,33 @@ export async function calculateRoute(params) {
       log.push(`[Step ${step}] ROUTE FOUND — within ${arrivalThreshold.toFixed(1)}NM of destination`);
       log.push(`---`);
       log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
-      const rawNodes = collectRawNodes(closest);
-      const route = buildRoute(closest, history, headingThreshold);
+
+      let finalNode = closest;
+      const distToDest = distanceNm(closest.point, end);
+      if (distToDest > 0.05) {
+        if (!crossesLand(coastline, closest.point, end, start, end, clearanceMarginNm)) {
+          const sog = closest.sog || constantSpeedKn || 0;
+          const hdg = bearing(closest.point, end);
+          const duration = sog > 0 ? distToDest / sog : 0;
+          finalNode = {
+            point: { ...end },
+            heading: hdg,
+            parent: closest,
+            time: addHours(closest.time, duration),
+            distToEnd: 0,
+            sog,
+            twa: closest.twa,
+            windSpeed: closest.windSpeed,
+            windDir: closest.windDir
+          };
+          log.push(`Exact final leg appended to destination: ${distToDest.toFixed(2)}NM at ${Math.round(hdg)}°T`);
+        } else {
+          log.push(`WARNING: exact final leg (${distToDest.toFixed(2)}NM) crosses land/clearance — route ends at closest reachable point instead of destination`);
+        }
+      }
+
+      const rawNodes = collectRawNodes(finalNode);
+      const route = buildRoute(finalNode, history, headingThreshold);
 
       log.push(`Legs: ${route.length}`);
       for (let i = 0; i < route.length; i++) {

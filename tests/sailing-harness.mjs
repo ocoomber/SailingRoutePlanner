@@ -7,6 +7,7 @@ import { loadCoastline } from '../src/core/coastline.js';
 import { analyzeRoute } from '../src/core/decision-logger.js';
 import { narrateRoute } from '../src/core/explain.js';
 import { interpolateWind } from '../src/core/wind-interpolation.js';
+import { distanceNm } from '../src/core/geometry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_DIR = join(__dirname, '..', 'src', 'data', 'test-fixtures');
@@ -89,6 +90,14 @@ async function runScenario(sc) {
       console.log(`  ${sc.description}`);
       return { pass: false };
     }
+  }
+
+  const lastLeg = result.route[result.route.length - 1];
+  const endGap = distanceNm(lastLeg.endWaypoint, sc.end);
+  if (endGap > 0.05) {
+    console.log(`FAIL [${elapsed}ms]: ${sc.name}`);
+    console.log(`  Final leg endWaypoint ${endGap.toFixed(3)}NM from destination, expected <= 0.05NM (exact final leg)`);
+    return { pass: false };
   }
 
   console.log(`\n=== ${sc.name} [${elapsed}ms] ===`);
