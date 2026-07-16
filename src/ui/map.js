@@ -4,6 +4,7 @@ let endMarker = null;
 let routePolyline = null;
 let legMarkers = [];
 let windArrows = [];
+let sailingDebug = null;
 let placing = 'start';
 let onPointSelected = null;
 let landOverlay = null;
@@ -72,6 +73,7 @@ export function drawRoute(legs) {
   if (routePolyline) map.removeLayer(routePolyline);
   clearLegMarkers();
   clearWindArrows();
+  clearSailingDebug();
 
   if (!legs || legs.length === 0) return;
 
@@ -237,6 +239,7 @@ export function clearRoute() {
   }
   clearLegMarkers();
   clearWindArrows();
+  clearSailingDebug();
 }
 
 export function clearAll() {
@@ -250,6 +253,56 @@ export function clearAll() {
   }
   clearRoute();
   placing = 'start';
+}
+
+export function drawSailingDebug(legs) {
+  clearSailingDebug();
+  if (!legs || legs.length === 0 || !map) return;
+
+  sailingDebug = L.layerGroup().addTo(map);
+
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+
+    const pts = [[leg.waypoint.lat, leg.waypoint.lon], [leg.endWaypoint.lat, leg.endWaypoint.lon]];
+
+    let color;
+    if (leg.tackSide === 'port') color = '#059669';
+    else if (leg.tackSide === 'starboard') color = '#d97706';
+    else color = '#6b7280';
+
+    L.polyline(pts, {
+      color, weight: 5, opacity: 0.5, dashArray: '6 4'
+    }).addTo(sailingDebug);
+
+    const tackChar = leg.tackSide === 'port' ? 'P' : leg.tackSide === 'starboard' ? 'S' : '-';
+    const label = `${leg.windAngle}\u00B0 ${tackChar}`;
+
+    L.circleMarker([leg.waypoint.lat, leg.waypoint.lon], {
+      radius: 3, color: '#1a1a2e', fillColor: '#1a1a2e', fillOpacity: 0.5, weight: 1
+    }).bindTooltip(label, { permanent: true, direction: 'top', offset: [0, -4] }).addTo(sailingDebug);
+
+    if (leg.maneuver) {
+      const mc = leg.maneuver === 'tack' ? '#2563eb' : '#f59e0b';
+      L.circleMarker([leg.waypoint.lat, leg.waypoint.lon], {
+        radius: 8, color: mc, fillColor: mc, fillOpacity: 0.3, weight: 2
+      }).bindTooltip(leg.maneuver.toUpperCase(), { permanent: true, direction: 'right', offset: [6, 0] }).addTo(sailingDebug);
+    }
+  }
+
+  const last = legs[legs.length - 1];
+  if (last.endWaypoint) {
+    L.circleMarker([last.endWaypoint.lat, last.endWaypoint.lon], {
+      radius: 3, color: '#1a1a2e', fillColor: '#1a1a2e', fillOpacity: 0.5, weight: 1
+    }).addTo(sailingDebug);
+  }
+}
+
+export function clearSailingDebug() {
+  if (sailingDebug) {
+    map.removeLayer(sailingDebug);
+    sailingDebug = null;
+  }
 }
 
 export function getMap() {
