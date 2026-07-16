@@ -83,7 +83,9 @@ export function drawRoute(legs) {
 
   for (let i = 0; i < legs.length; i++) {
     const leg = legs[i];
-    points.push([leg.waypoint.lat, leg.waypoint.lon]);
+    if (points.length === 0 || points[points.length - 1][0] !== leg.waypoint.lat || points[points.length - 1][1] !== leg.waypoint.lon) {
+      points.push([leg.waypoint.lat, leg.waypoint.lon]);
+    }
 
     const isTack = leg.maneuver === 'tack';
     const isGybe = leg.maneuver === 'gybe';
@@ -106,6 +108,11 @@ export function drawRoute(legs) {
     marker.bindTooltip(label + extra, { permanent: false });
 
     legMarkers.push(marker);
+  }
+
+  const lastLeg = legs[legs.length - 1];
+  if (lastLeg.endWaypoint) {
+    points.push([lastLeg.endWaypoint.lat, lastLeg.endWaypoint.lon]);
   }
 
   routePolyline = L.polyline(points, {
