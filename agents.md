@@ -181,6 +181,36 @@ from destination without ever crossing the threshold, eventually
 exhausting `maxSteps`. Reproducible; not yet root-caused. Separate from
 (and discovered while investigating) the coastline data bugs above.
 
+**Fixed since (same investigation, two more real bugs found beyond the
+clip-artifact one above):**
+- `tools/generate-tiles.mjs` was assigning each ring's FULL point list to
+  *every* tile whose bbox contained any single point of that ring. A
+  ring representing a whole regional landmass (hundreds of points)
+  touches dozens of tiles, so it got duplicated into every one of them
+  — bloating tile files (46MB → 6.3MB after the fix) and, worse, making
+  `SmartCoastline` render/scan the same giant polygon N times when N
+  tiles loaded for one route (this is what the "garbage" triangular
+  overlay in Truro/Falmouth actually was — not corrupt geometry, just
+  the same real polygon stacked and rendered many times over). Fixed
+  two ways: `generate-tiles.mjs` now skips rings over
+  `MAX_RING_POINTS_PER_TILE` (500) entirely — the coarse layer already
+  carries an equivalent copy for containment fallback — and
+  `src/data/coastline/dedupe-rings.js` deduplicates by ring signature
+  when merging tiles at runtime (`manager.js`, `server/coastline-node.js`)
+  as a second layer of defense.
+- The coarse pass's clearance-margin fallback (single step, 2NM → 0.5NM)
+  wasn't small enough for the tightest real channels — confirmed the Fal
+  estuary near St Mawes genuinely narrows below 0.5NM in the accurate
+  OSM data (the old crude in-house coastline just couldn't see this).
+  `planPassage()` now cascades through `[2, 0.5, 0.2, 0.05]` NM,
+  stopping at the first clearance that finds a route. Note this can be
+  slow (each failing attempt runs the isochrone out to `maxSteps` before
+  giving up, so a route needing the tightest fallback can take ~10s) —
+  not fixed, just made correct. The UI's "Route-only mode" debug path
+  does NOT use this cascade (it calls `calculateRoute` directly with
+  whatever clearance the user set) — that's intentional, it's meant to
+  show the literal outcome at the chosen clearance, not paper over it.
+
 ## Conventions
 - ES module imports with explicit .js extensions
 - Leaflet via CDN, not bundled

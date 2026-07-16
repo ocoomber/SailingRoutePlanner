@@ -11,7 +11,7 @@ import {
 } from './passage-result.js';
 
 const COARSE_CLEARANCE_NM = 2;
-const NARROW_HARBOUR_CLEARANCE_NM = 0.5;
+const NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM = [0.5, 0.2, 0.05];
 
 const DEFAULT_ROUTER_OPTS = {
   timeStepMinutes: 30,
@@ -47,8 +47,9 @@ export async function planPassage(input) {
 
   let coarseResult = await runCoarsePass(COARSE_CLEARANCE_NM);
 
-  if ((!coarseResult.route || coarseResult.route.length === 0) && NARROW_HARBOUR_CLEARANCE_NM < COARSE_CLEARANCE_NM) {
-    coarseResult = await runCoarsePass(NARROW_HARBOUR_CLEARANCE_NM);
+  for (const fallbackMargin of NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM) {
+    if (coarseResult.route && coarseResult.route.length > 0) break;
+    coarseResult = await runCoarsePass(fallbackMargin);
   }
 
   if (!coarseResult.route || coarseResult.route.length === 0) {
