@@ -75,6 +75,30 @@ export function addVectors(a, b) {
   };
 }
 
+export function pointToSegmentDistNm(p, a, b) {
+  const midLat = (a.lat + b.lat) / 2;
+  const cosMid = Math.cos(midLat * DEG_TO_RAD);
+
+  const ax = a.lon * cosMid, ay = a.lat;
+  const bx = b.lon * cosMid, by = b.lat;
+  const px = p.lon * cosMid, py = p.lat;
+
+  const abx = bx - ax, aby = by - ay;
+  const apx = px - ax, apy = py - ay;
+
+  const len2 = abx * abx + aby * aby;
+  if (len2 === 0) return distanceNm(p, a);
+
+  const t = Math.max(0, Math.min(1, (abx * apx + aby * apy) / len2));
+
+  const closest = {
+    lat: ay + aby * t,
+    lon: (ax + abx * t) / cosMid
+  };
+
+  return distanceNm(p, closest);
+}
+
 export function interpolatePoint(a, b, t) {
   return {
     lat: a.lat + (b.lat - a.lat) * t,
