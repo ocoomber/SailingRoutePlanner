@@ -1,3 +1,6 @@
+import { classifyTransition, classifyInitial, summarizeTransitions } from '../core/classify-transition.js';
+import { formatTransition, formatInitial } from '../core/explain.js';
+
 function formatTime(date) {
   return date.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
@@ -6,6 +9,50 @@ function formatDuration(hours) {
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function renderTransitionPanel(transition) {
+  const div = document.createElement('div');
+  const isManeuver = transition.isManeuver;
+  const isCondensed = !isManeuver && transition.sameCategory;
+
+  if (isManeuver) {
+    div.className = 'transition-panel transition-maneuver';
+  } else if (isCondensed) {
+    div.className = 'transition-panel transition-condensed';
+  } else {
+    div.className = 'transition-panel transition-category-change';
+  }
+
+  if (isManeuver) {
+    const badge = document.createElement('span');
+    badge.className = `transition-badge badge-${transition.category}`;
+    badge.textContent = transition.category.toUpperCase();
+    div.appendChild(badge);
+    div.appendChild(document.createElement('br'));
+  }
+
+  const statLine = document.createElement('div');
+  statLine.className = 'transition-statline';
+  statLine.textContent = transition.statLine;
+  div.appendChild(statLine);
+
+  const text = document.createElement('div');
+  text.className = 'transition-text';
+  text.textContent = transition.explanation;
+  div.appendChild(text);
+
+  return div;
+}
+
+function renderInitialPanel(initial) {
+  const div = document.createElement('div');
+  div.className = 'transition-panel transition-initial';
+  const text = document.createElement('div');
+  text.className = 'transition-text';
+  text.textContent = formatInitial(initial);
+  div.appendChild(text);
+  return div;
 }
 
 export function showResults(legs, totalTime, timeMode, computedDeparture, targetTime) {
@@ -35,6 +82,26 @@ export function showResults(legs, totalTime, timeMode, computedDeparture, target
   ));
   warnings.innerHTML = '';
   warnings.appendChild(warnP);
+
+  const planSummary = document.createElement('p');
+  planSummary.className = 'plan-summary';
+  const transitionSummary = summarizeTransitions(legs);
+
+  if (transitionSummary && transitionSummary !== 'No course changes') {
+    planSummary.textContent = `Course changes: ${transitionSummary}.`;
+  } else {
+    planSummary.textContent = 'No course changes — direct passage.';
+  }
+
+  if (legs.length > 1 && legs.some(l => l.windSpeed > 0)) {
+    const dest = legs[legs.length - 1].endWaypoint;
+    const initial = legs[0].windSpeed > 0 ? classifyInitial(legs[0], dest) : null;
+    if (initial) {
+      planSummary.textContent += ` ${formatInitial(initial)}`;
+    }
+  }
+
+  warnings.appendChild(planSummary);
 
   legList.innerHTML = '';
 
@@ -98,6 +165,13 @@ export function showResults(legs, totalTime, timeMode, computedDeparture, target
     li.appendChild(headerDiv);
     li.appendChild(detailsDiv);
     legList.appendChild(li);
+
+    if (i < legs.length - 1 && leg.windSpeed > 0) {
+      const dest = legs[legs.length - 1].endWaypoint;
+      const transition = classifyTransition(leg, legs[i + 1], dest);
+      const panel = renderTransitionPanel(transition);
+      legList.appendChild(panel);
+    }
   }
 }
 

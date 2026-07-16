@@ -66,6 +66,16 @@ export function formatDecision(rec) {
   return parts.join('. ') + '.';
 }
 
+export function formatTransition(transition) {
+  const lines = [transition.statLine];
+  lines.push(transition.explanation);
+  return lines.join('\n');
+}
+
+export function formatInitial(initial) {
+  return `Initial heading set from wind and bearing to destination at departure. Wind ${initial.windSpeed}kn from ${initial.windDir}\u00B0, bearing ${initial.bearing}\u00B0 — optimal course ${initial.heading}\u00B0 on ${initial.tackSide || '?'} tack (${initial.pointOfSail}).`;
+}
+
 export function narrateRoute(rawNodes, route, decisions) {
   const lines = [];
 
