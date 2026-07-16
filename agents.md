@@ -63,15 +63,31 @@ up polar speed, apply wind + optional tidal vector, discard
 land-crossing candidates (`crossesLand`), cap and prune the isochrone,
 backtrack, simplify legs.
 
-Planned (build-plan WS2): a Tier-1 configuration planner (motor /
-headsail / full / reefed, duration-vs-hassle comfort logic) runs before
-heading optimization; `planPassage()` in `src/core/passage-planner.js`
-becomes the single entry point returning `PassageResult`.
+**Built (WS2):** a Tier-1 configuration planner
+(`src/core/config-planner.js`) decides motor / headsail / full / reefed
+blocks from duration-vs-hassle comfort logic
+(`src/core/comfort-params.js`, `src/core/sail-configs.js`) before Tier-2
+heading optimization runs per block (`router.js` `arriveByTime` /
+`allowIntoWind` params). `planPassage()` in `src/core/passage-planner.js`
+is the single pure entry point, returning `PassageResult` (Section 3 of
+build-plan.md): summary, configBlocks, legs, decisions (heading /
+landDeviation / config / transition, discriminated by `.kind`, merged
+chronologically), narration, warnings, debug. Orchestration helpers:
+`passage-block-executor.js` (per-block router execution + motor
+fallback), `passage-decisions.js` (decision merge), `passage-result.js`
+(timeline/summary/warnings assembly) — split out to keep each file
+under the ~150-line soft ceiling. `src/services/passage-service.js` is
+the thin browser wrapper (wind fetch + CoastlineManager callbacks);
+`src/ui/app.js` calls it directly — the old manual coarse/fine
+two-pass orchestration in `app.js` no longer exists. `app.js` keeps a
+separate lightweight "Route-only mode" path (constant-speed
+`calculateRoute` call, no wind, no comfort logic) for geometry-only
+debug checks.
 
 ## Key Decisions
 - Route engine returns structured data; UI renders it
 - All comfort/behavior parameters configurable, none hardcoded
-  (`src/core/comfort-params.js` once WS2 lands)
+  (`src/core/comfort-params.js`)
 - Engine agnostic to where a position came from (Phase 2 ready)
 - Tidal current: planned as digitized tidal-diamond dataset + EasyTide
   stage lookup (build-plan WS4); until then routes carry a "tidal
@@ -89,16 +105,21 @@ becomes the single entry point returning `PassageResult`.
 
 ## Test Suites
 - `tests/run.mjs` — Land-avoidance (6 routes/cases)
-- `tests/sailing-harness.mjs` — Sailing logic (5 synthetic wind/tide
-  scenarios + 1 edge case), fixtures in `src/data/test-fixtures/`
+- `tests/sailing-harness.mjs` — Sailing logic / Tier 2 in isolation
+  (5 synthetic wind/tide scenarios + 3 edge cases), fixtures in
+  `src/data/test-fixtures/`
 - `tests/coastline-system.mjs` — Tiling/coastline system (48 checks)
+- `tests/comfort-harness.mjs` — Comfort/Tier-1 config planner, full
+  `planPassage()` end-to-end (6 scenarios: light air, long beam reach,
+  short wind window, final-approach override, solo-vs-crewed hassle,
+  reef trigger)
 - `tests/all.mjs` — Runs everything; must pass before any task is done
 Tests always call real production functions, never reimplementations.
 
 ## Current State
 Phase 1 prototyping. All test suites green as of 2026-07-16. Executing
-`build-plan.md`: WS1 engine fixes → WS2 comfort rewrite → WS3 API →
-WS5 OSM coastline swap → WS4 tidal → WS6 UI/docs.
+`build-plan.md`: WS1 engine fixes (done) → WS2 comfort rewrite (done)
+→ WS3 API → WS5 OSM coastline swap → WS4 tidal → WS6 UI/docs.
 Testing against the live GitHub Pages build. Commit directly to main
 after each meaningful change — no branches, no PRs.
 
