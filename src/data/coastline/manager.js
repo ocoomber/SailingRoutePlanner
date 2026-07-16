@@ -2,7 +2,7 @@ import { loadCoastline } from '../../core/coastline.js';
 import { TileCache } from './tile-cache.js';
 import { pointToTile, tileKey, selectTilesForCorridor, DEFAULT_TILE_ZOOM } from './tile-selector.js';
 
-const TILE_SERVER_BASE = '/tiles/coastline';
+const TILE_SERVER_BASE = 'tiles/coastline';
 
 class SmartCoastline {
   constructor(fineCoastline, coarseCoastline, loadedTileKeys) {
@@ -40,6 +40,7 @@ export class CoastlineManager {
     this._tileCache = new TileCache();
     this._fineData = null;
     this._loadedTileKeys = new Set();
+    this._tileDataMap = new Map();
     this._smartCoastline = null;
     this._tileZoom = DEFAULT_TILE_ZOOM;
     this._pendingFetches = new Map();
@@ -98,20 +99,24 @@ export class CoastlineManager {
       })
     );
 
-    const allSegments = [];
-    const allOuterRings = [];
-    const allInnerRings = [];
-
     for (const result of results) {
       if (result.status === 'fulfilled') {
         const { key, data } = result.value;
         this._loadedTileKeys.add(key);
-        allSegments.push(...(data.segments || []));
-        allOuterRings.push(...(data.outerRings || []));
-        allInnerRings.push(...(data.innerRings || []));
+        this._tileDataMap.set(key, data);
       } else {
         console.warn('Tile load failed:', result.reason);
       }
+    }
+
+    const allSegments = [];
+    const allOuterRings = [];
+    const allInnerRings = [];
+
+    for (const data of this._tileDataMap.values()) {
+      allSegments.push(...(data.segments || []));
+      allOuterRings.push(...(data.outerRings || []));
+      allInnerRings.push(...(data.innerRings || []));
     }
 
     const mergedData = { segments: allSegments, outerRings: allOuterRings, innerRings: allInnerRings };
