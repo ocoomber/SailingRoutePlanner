@@ -114,6 +114,7 @@ function onSegment(p, q, r) {
 }
 
 export function pointInPolygon(point, polygon) {
+  if (!polygon) return false;
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const xi = polygon[i].lon, yi = polygon[i].lat;
