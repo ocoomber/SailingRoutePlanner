@@ -48,6 +48,19 @@ function simplifyRing(ring, epsilon) {
   return simplified;
 }
 
+function bboxDiagonalNm(ring) {
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  for (const p of ring) {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lon < minLon) minLon = p.lon;
+    if (p.lon > maxLon) maxLon = p.lon;
+  }
+  const dLatNm = (maxLat - minLat) * 60;
+  const dLonNm = (maxLon - minLon) * 60 * Math.cos((minLat + maxLat) / 2 * Math.PI / 180);
+  return Math.sqrt(dLatNm * dLatNm + dLonNm * dLonNm);
+}
+
 function ringToSegments(ring) {
   const segs = [];
   for (let i = 0; i < ring.length - 1; i++) {
@@ -60,9 +73,13 @@ function ringToSegments(ring) {
 const raw = JSON.parse(readFileSync(join(ROOT, 'src/data/coastlines/sw-england.json'), 'utf-8'));
 
 const EPSILON = 0.02;
+const MIN_RING_DIAGONAL_NM = 2;
 
-const simplifiedOuterRings = raw.outerRings.map(r => simplifyRing(r, EPSILON));
-const simplifiedInnerRings = raw.innerRings.map(r => simplifyRing(r, EPSILON));
+const outerRingsForCoarse = raw.outerRings.filter(r => bboxDiagonalNm(r) >= MIN_RING_DIAGONAL_NM);
+const innerRingsForCoarse = raw.innerRings.filter(r => bboxDiagonalNm(r) >= MIN_RING_DIAGONAL_NM);
+
+const simplifiedOuterRings = outerRingsForCoarse.map(r => simplifyRing(r, EPSILON));
+const simplifiedInnerRings = innerRingsForCoarse.map(r => simplifyRing(r, EPSILON));
 
 const coarseSegments = [];
 for (const ring of simplifiedOuterRings) {
@@ -85,6 +102,7 @@ writeFileSync(join(outDir, 'sw-england-coarse.json'), JSON.stringify(coarse));
 
 const origSegs = raw.segments.length;
 console.log(`Original: ${origSegs} segments, ${raw.outerRings.length} outer rings`);
+console.log(`Dropped ${raw.outerRings.length - outerRingsForCoarse.length} outer rings under ${MIN_RING_DIAGONAL_NM}NM diagonal (irrelevant at coarse-pass clearance)`);
 console.log(`Coarse:   ${coarseSegments.length} segments, ${simplifiedOuterRings.length} outer rings`);
 console.log(`Reduction: ${((1 - coarseSegments.length / origSegs) * 100).toFixed(1)}%`);
 console.log(`Written to src/data/coastline/sw-england-coarse.json`);

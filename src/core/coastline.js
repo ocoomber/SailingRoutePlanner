@@ -1,6 +1,6 @@
 import { segmentsCross, pointInPolygon, distanceNm, pointToSegmentDistNm, interpolatePoint } from './geometry.js';
 
-const CELL_SIZE = 0.1;
+const CELL_SIZE = 0.06;
 
 export function loadCoastline(data) {
   const grid = {};
