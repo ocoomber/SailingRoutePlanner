@@ -29,12 +29,20 @@ were removed as out of date.
   package.json.
 - Open-Meteo Forecast API for wind (free, no key)
 - Coastline: two-pass tiled system (coarse bundled layer + z/x/y detail
-  tiles generated at deploy time, cached in IndexedDB). Source data:
-  `src/data/coastlines/sw-england.json` is meant to be rebuilt from OSM
-  land polygons (`osmdata.openstreetmap.de`, ODbL) via
-  `tools/build-coastline-source.mjs` (WS5 tooling exists; the actual
-  ~700MB source archive and re-run are gated on a manual download —
-  see `server/README.md`)
+  tiles generated at deploy time, cached in IndexedDB). Source data
+  (`src/data/coastlines/sw-england.json`) is built from OSM land
+  polygons (`osmdata.openstreetmap.de`, ODbL) via
+  `tools/build-coastline-source.mjs` — done (WS5). Raw OSM vertex
+  density is lightly simplified at ingestion (~56m tolerance, far below
+  any clearance margin the router checks) purely to keep the spatial
+  index fast; `src/core/coastline.js`'s `CELL_SIZE` (0.06°) must stay
+  larger than the largest clearance margin ever passed to `crossesLand`
+  (currently 2NM) or lookups silently miss land beyond the 3×3 cell
+  search window. The coarse layer additionally drops outer rings
+  smaller than 2NM bbox-diagonal (irrelevant at coarse-pass clearance —
+  thousands of tiny rocks/islets exist in real OSM data, e.g. the Isles
+  of Scilly). To regenerate from a fresh archive: see
+  `server/README.md`.
 - Windows PC dev environment — never assume Mac tooling
 
 ## Boat
@@ -110,7 +118,8 @@ debug checks.
 - Tidal stream not modelled unless data supplied
 - Forecast can be wrong
 - Cross-check against chart before departure
-- OSM/ODbL attribution once WS5 lands
+- OSM/ODbL attribution: `PassageResult.summary.attribution`, the UI
+  footer, and `server/README.md`
 
 ## Test Suites
 - `tests/run.mjs` — Land-avoidance (6 routes/cases)
@@ -131,9 +140,9 @@ Tests always call real production functions, never reimplementations.
 ## Current State
 Phase 1 prototyping. All test suites green as of 2026-07-16. Executing
 `build-plan.md`: WS1 engine fixes (done) → WS2 comfort rewrite (done)
-→ WS3 API (done) → WS5 OSM coastline swap → WS4 tidal → WS6 UI/docs.
-Testing against the live GitHub Pages build. Commit directly to main
-after each meaningful change — no branches, no PRs.
+→ WS3 API (done) → WS5 OSM coastline swap (done) → WS4 tidal → WS6
+UI/docs. Testing against the live GitHub Pages build. Commit directly
+to main after each meaningful change — no branches, no PRs.
 
 ## Conventions
 - ES module imports with explicit .js extensions

@@ -19,8 +19,10 @@ download it yourself and pass the local path. A good place to keep it
 is tools/data/ (gitignored).
 
 Output: src/data/coastlines/sw-england.json, clipped to the bbox
-  lat 49.0-51.5, lon -7.0 to -2.0, in the existing
-  {segments, outerRings, innerRings, source} shape.
+  lat 49.0-51.5, lon -7.0 to -2.0, lightly simplified (~56m tolerance —
+  well below any clearance margin this router ever checks) to keep the
+  spatial index usable against raw OSM's meter-scale vertex density, in
+  the existing {segments, outerRings, innerRings, source} shape.
 `;
 
 const BBOX = { south: 49.0, north: 51.5, west: -7.0, east: -2.0 };
@@ -80,6 +82,42 @@ function clipRingToBbox(points, bbox) {
   return clipped;
 }
 
+const LIGHT_SIMPLIFY_EPSILON_DEG = 0.0005;
+
+function perpendicularDist(point, a, b) {
+  const dx = b.lon - a.lon;
+  const dy = b.lat - a.lat;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len === 0) return Math.sqrt(Math.pow(point.lon - a.lon, 2) + Math.pow(point.lat - a.lat, 2));
+  const t = Math.max(0, Math.min(1, ((point.lon - a.lon) * dx + (point.lat - a.lat) * dy) / (len * len)));
+  const projLon = a.lon + t * dx;
+  const projLat = a.lat + t * dy;
+  return Math.sqrt(Math.pow(point.lon - projLon, 2) + Math.pow(point.lat - projLat, 2));
+}
+
+function douglasPeucker(points, epsilon) {
+  if (points.length <= 2) return points;
+  let maxDist = 0, maxIdx = 0;
+  const first = points[0];
+  const last = points[points.length - 1];
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = perpendicularDist(points[i], first, last);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > epsilon) {
+    const left = douglasPeucker(points.slice(0, maxIdx + 1), epsilon);
+    const right = douglasPeucker(points.slice(maxIdx), epsilon);
+    return left.slice(0, -1).concat(right);
+  }
+  return [first, last];
+}
+
+function lightSimplify(ring) {
+  if (ring.length <= 3) return ring;
+  const simplified = douglasPeucker(ring, LIGHT_SIMPLIFY_EPSILON_DEG);
+  return simplified.length < 3 ? ring : simplified;
+}
+
 function ringToSegments(ring) {
   const segs = [];
   for (let i = 0; i < ring.length - 1; i++) {
@@ -122,7 +160,7 @@ async function main() {
         const clipped = clipRingToBbox(toPoints(rawRing), BBOX);
         if (clipped.length < 3) continue;
 
-        (i === 0 ? outerRings : innerRings).push(clipped);
+        (i === 0 ? outerRings : innerRings).push(lightSimplify(clipped));
         ringsKept++;
       }
     }

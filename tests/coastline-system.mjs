@@ -177,8 +177,8 @@ console.log('\n--- Coarse vs Fine Resolution ---');
   assert(coarseJson.segments.length < fullJson.segments.length,
     `coarse (${coarseJson.segments.length}) has fewer segments than full (${fullJson.segments.length})`);
 
-  assert(coarseJson.outerRings.length === fullJson.outerRings.length,
-    `both have same number of outer rings`);
+  assert(coarseJson.outerRings.length > 0 && coarseJson.outerRings.length <= fullJson.outerRings.length,
+    `coarse (${coarseJson.outerRings.length}) has fewer or equal outer rings than full (${fullJson.outerRings.length}) — coarse legitimately drops islands too small to matter at coarse-pass clearance`);
 
   const coarse = loadCoastline(coarseJson);
   const full = loadCoastline(fullJson);
@@ -204,8 +204,8 @@ console.log('\n--- Coarse pass finds approximate route ---');
 
     let coarseCrosses = false;
     for (let i = 0; i < 3; i++) {
-      const mid = { lat: tc.start.lat + (tc.end.lat - tc.start.lat) * (i / 2), lon: tc.start.lon + (tc.end.lon - tc.start.lon) * (i / 2) };
-      const mid2 = { lat: tc.start.lat + (tc.end.lat - tc.start.lat) * ((i + 1) / 2), lon: tc.start.lon + (tc.end.lon - tc.start.lon) * ((i + 1) / 2) };
+      const mid = { lat: tc.start.lat + (tc.end.lat - tc.start.lat) * (i / 3), lon: tc.start.lon + (tc.end.lon - tc.start.lon) * (i / 3) };
+      const mid2 = { lat: tc.start.lat + (tc.end.lat - tc.start.lat) * ((i + 1) / 3), lon: tc.start.lon + (tc.end.lon - tc.start.lon) * ((i + 1) / 3) };
       if (crossesLand(coarseCoast, mid, mid2, tc.start, tc.end, 0.5)) {
         coarseCrosses = true;
         break;
