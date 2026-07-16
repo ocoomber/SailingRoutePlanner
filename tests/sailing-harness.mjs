@@ -143,6 +143,29 @@ async function testNoFalseManeuver() {
   return pass;
 }
 
+async function testCircularWindMean() {
+  const path = [
+    { heading: null, twa: 0, windDir: 350, windSpeed: 14, point: { lat: 50.0, lon: -3.5 }, time: '2026-07-16T12:00:00.000Z', sog: 0, distToEnd: 50 },
+    { heading: 230, twa: 94, windDir: 350, windSpeed: 14, point: { lat: 50.04, lon: -3.48 }, time: '2026-07-16T12:30:00.000Z', sog: 6.5, distToEnd: 48 },
+    { heading: 230, twa: 94, windDir: 10, windSpeed: 14, point: { lat: 50.08, lon: -3.46 }, time: '2026-07-16T13:00:00.000Z', sog: 6.5, distToEnd: 46 },
+  ];
+
+  const legs = simplifyLegs(path, 15);
+  const pass = legs.length === 1 && Math.abs(normalizeSigned(legs[0].windDir)) < 1;
+
+  console.log(`\n=== Circular mean wind direction ===`);
+  if (pass) {
+    console.log(`  PASS: windDir ${legs[0].windDir}° (350°/10° averages to ~0°, not ~180°)`);
+  } else {
+    console.log(`  FAIL: windDir ${legs[0] ? legs[0].windDir : 'n/a'}°, expected ~0°`);
+  }
+  return pass;
+}
+
+function normalizeSigned(deg) {
+  return ((deg + 180) % 360 + 360) % 360 - 180;
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -154,5 +177,8 @@ for (const sc of scenarios) {
 const edgePass = await testNoFalseManeuver();
 if (edgePass) passed++; else failed++;
 
-console.log(`\n${passed} passed, ${failed} failed out of ${scenarios.length + 1} tests (${scenarios.length} scenarios + 1 edge case)`);
+const circularMeanPass = await testCircularWindMean();
+if (circularMeanPass) passed++; else failed++;
+
+console.log(`\n${passed} passed, ${failed} failed out of ${scenarios.length + 2} tests (${scenarios.length} scenarios + 2 edge cases)`);
 process.exit(failed > 0 ? 1 : 0);

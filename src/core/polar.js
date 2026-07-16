@@ -42,6 +42,15 @@ export function maxSpeed(polars) {
   return max;
 }
 
+export function findNoGoAngle(polars, windSpeed) {
+  for (const twa of polars.twaSteps) {
+    if (lookupSpeed(polars, twa, windSpeed) > 0) {
+      return twa;
+    }
+  }
+  return 45;
+}
+
 function findClosestIndex(steps, value) {
   if (value <= steps[0]) return [0, 0];
   if (value >= steps[steps.length - 1]) {

@@ -1,5 +1,5 @@
 import { bearing } from './geometry.js';
-import { lookupSpeed } from './polar.js';
+import { lookupSpeed, findNoGoAngle } from './polar.js';
 
 const DEG_TO_RAD = Math.PI / 180;
 const EVALUATION_STEP = 5;
@@ -20,15 +20,6 @@ function tackLabel(twa) {
 function vmgToward(heading, boatSpeed, bearingToDest) {
   const angleRad = (heading - bearingToDest) * DEG_TO_RAD;
   return boatSpeed * Math.cos(angleRad);
-}
-
-function findNoGoAngle(polars, windSpeed) {
-  for (const twa of polars.twaSteps) {
-    if (lookupSpeed(polars, twa, windSpeed) > 0) {
-      return twa;
-    }
-  }
-  return 45;
 }
 
 function evaluateAlternatives(polars, windSpeed, windDir, bearingToDest) {
