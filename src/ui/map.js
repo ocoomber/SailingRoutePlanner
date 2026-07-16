@@ -1,6 +1,7 @@
 import { addChartingTools } from './charting-tools.js';
 
 let map = null;
+let chartingTools = null;
 let startMarker = null;
 let endMarker = null;
 let routePolyline = null;
@@ -33,10 +34,10 @@ export function initMap(callback) {
 
   L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
 
-  addChartingTools(map);
+  chartingTools = addChartingTools(map);
 
   map.on('click', (e) => {
-    if (window.__chartingActive) return;
+    if (chartingTools && chartingTools.isRulerActive()) return;
     if (placing === 'start') {
       setStart(e.latlng.lat, e.latlng.lng);
       onPointSelected('start', e.latlng.lat, e.latlng.lng);
@@ -555,6 +556,10 @@ export function clearSailingDebug() {
 
 export function getMap() {
   return map;
+}
+
+export function clearChartingTools() {
+  if (chartingTools) chartingTools.clearAll();
 }
 
 function tileToLat(y, zoom) {

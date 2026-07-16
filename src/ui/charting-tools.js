@@ -1,8 +1,11 @@
 import { distanceNm, bearing } from '../core/geometry.js';
 
 export function addChartingTools(map) {
-  const ruler = { active: false, points: [], layers: [] };
-  const bars = [];
+  const state = {
+    activeTool: null,
+    ruler: { vertices: [] },
+    bars: []
+  };
 
   const container = L.control({ position: 'topright' });
 
@@ -16,7 +19,7 @@ export function addChartingTools(map) {
       </div>
       <div style="display:flex;gap:4px;margin-bottom:4px;">
         <button id="btn-ruler" class="chart-btn">Ruler</button>
-        <button id="btn-bar" class="chart-btn">Bar</button>
+        <button id="btn-bar" class="chart-btn">Add Bar</button>
       </div>
       <div id="charting-info" style="font-size:11px;color:#6b7280;min-height:16px;font-family:monospace;white-space:pre-wrap;"></div>
     `;
@@ -29,7 +32,7 @@ export function addChartingTools(map) {
     });
 
     div.querySelector('#btn-ruler').addEventListener('click', function() { toggleRuler(this); });
-    div.querySelector('#btn-bar').addEventListener('click', function() { addBar(); });
+    div.querySelector('#btn-bar').addEventListener('click', addBar);
     div.querySelector('#charting-clearall').addEventListener('click', clearAll);
     L.DomEvent.disableClickPropagation(div);
 
@@ -52,45 +55,86 @@ export function addChartingTools(map) {
     }
   }
 
-  function setInfo(text) {
-    const el = document.querySelector('#charting-info');
-    if (el) el.textContent = text;
-  }
-
   function clearAll() {
-    if (ruler.active) deactivateRuler();
+    if (state.activeTool === 'ruler') deactivateRuler();
     clearRuler();
-    bars.forEach(b => removeBar(b));
-    bars.length = 0;
-    setInfo('');
+    while (state.bars.length) removeBar(state.bars[0]);
+    updateInfo();
   }
 
   function clearRuler() {
-    ruler.layers.forEach(l => map.removeLayer(l));
-    ruler.layers = [];
-    ruler.points = [];
+    for (const v of state.ruler.vertices) {
+      map.removeLayer(v.marker);
+      if (v.line) map.removeLayer(v.line);
+      if (v.tooltip) map.removeLayer(v.tooltip);
+    }
+    state.ruler.vertices = [];
+    updateInfo();
+  }
+
+  function calcTotalDist() {
+    let total = 0;
+    const verts = state.ruler.vertices;
+    for (let i = 1; i < verts.length; i++) {
+      total += distanceNm(
+        { lat: verts[i - 1].latlng.lat, lon: verts[i - 1].latlng.lng },
+        { lat: verts[i].latlng.lat, lon: verts[i].latlng.lng }
+      );
+    }
+    return total;
+  }
+
+  function updateInfo() {
+    const el = document.querySelector('#charting-info');
+    if (!el) return;
+
+    if (state.activeTool === 'ruler') {
+      el.textContent = 'Click to place points · Right-click/Backspace to undo · Double-click/Esc to finish';
+      return;
+    }
+
+    const parts = [];
+
+    if (state.ruler.vertices.length > 0) {
+      const total = calcTotalDist();
+      parts.push(`${state.ruler.vertices.length} pts · Total: ${total.toFixed(2)}NM`);
+      parts.push('<a href="#" id="ruler-clear-link" style="color:#dc2626;text-decoration:none;font-weight:700;font-size:13px;" title="Clear ruler">×</a>');
+    }
+
+    if (state.bars.length > 0) {
+      parts.push(`${state.bars.length} bar${state.bars.length > 1 ? 's' : ''}`);
+    }
+
+    el.innerHTML = parts.join(' · ') || '';
+
+    const clearLink = el.querySelector('#ruler-clear-link');
+    if (clearLink) {
+      clearLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        clearRuler();
+      });
+    }
   }
 
   function activateRuler() {
-    ruler.active = true;
-    window.__chartingActive = true;
-    setInfo('Click to place points · Double-click to finish');
+    state.activeTool = 'ruler';
+    updateInfo();
     map.getContainer().style.cursor = 'crosshair';
     map.doubleClickZoom.disable();
   }
 
   function deactivateRuler() {
-    ruler.active = false;
-    window.__chartingActive = false;
+    state.activeTool = null;
     map.getContainer().style.cursor = '';
     map.doubleClickZoom.enable();
     const btn = document.querySelector('#btn-ruler');
     if (btn) setBtnActive(btn, false);
-    if (ruler.points.length === 0) setInfo('');
+    if (state.ruler.vertices.length === 1) clearRuler();
+    updateInfo();
   }
 
   function toggleRuler(btn) {
-    if (ruler.active) {
+    if (state.activeTool === 'ruler') {
       deactivateRuler();
       setBtnActive(btn, false);
     } else {
@@ -99,61 +143,134 @@ export function addChartingTools(map) {
     }
   }
 
+  function undoLastPoint() {
+    const verts = state.ruler.vertices;
+    if (verts.length === 0) return;
+    const last = verts.pop();
+    map.removeLayer(last.marker);
+    if (last.line) map.removeLayer(last.line);
+    if (last.tooltip) map.removeLayer(last.tooltip);
+    updateInfo();
+  }
+
   function onMapClick(e) {
-    if (!ruler.active) return;
+    if (state.activeTool !== 'ruler') return;
 
-    const pt = e.latlng;
-    ruler.points.push(pt);
+    const ll = e.latlng;
+    const vertex = { latlng: ll };
 
-    const marker = L.circleMarker([pt.lat, pt.lng], {
+    vertex.marker = L.circleMarker([ll.lat, ll.lng], {
       radius: 5, color: '#3b82f6', fillColor: '#60a5fa', fillOpacity: 0.9, weight: 2
     }).addTo(map);
-    ruler.layers.push(marker);
 
-    if (ruler.points.length >= 2) {
-      const prev = ruler.points[ruler.points.length - 2];
-      const segDist = distanceNm({ lat: prev.lat, lon: prev.lng }, { lat: pt.lat, lon: pt.lng });
-      const segBrg = bearing({ lat: prev.lat, lon: prev.lng }, { lat: pt.lat, lon: pt.lng });
+    const prev = state.ruler.vertices.length > 0 ? state.ruler.vertices[state.ruler.vertices.length - 1] : null;
 
-      const line = L.polyline([[prev.lat, prev.lng], [pt.lat, pt.lng]], {
+    if (prev) {
+      const segDist = distanceNm(
+        { lat: prev.latlng.lat, lon: prev.latlng.lng },
+        { lat: ll.lat, lon: ll.lng }
+      );
+      const segBrg = bearing(
+        { lat: prev.latlng.lat, lon: prev.latlng.lng },
+        { lat: ll.lat, lon: ll.lng }
+      );
+
+      vertex.line = L.polyline([[prev.latlng.lat, prev.latlng.lng], [ll.lat, ll.lng]], {
         color: '#3b82f6', weight: 2, dashArray: '6,4', opacity: 0.7
       }).addTo(map);
-      ruler.layers.push(line);
 
-      const mid = { lat: (prev.lat + pt.lat) / 2, lon: (prev.lng + pt.lng) / 2 };
-      const labelText = `${segBrg.toFixed(0)}° ${segDist.toFixed(2)}NM`;
-      const label = L.tooltip({ permanent: true, direction: 'top', offset: [0, -5], className: 'chart-tooltip' })
+      const mid = { lat: (prev.latlng.lat + ll.lat) / 2, lon: (prev.latlng.lng + ll.lng) / 2 };
+      vertex.tooltip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -5], className: 'chart-tooltip' })
         .setLatLng([mid.lat, mid.lon])
-        .setContent(labelText)
+        .setContent(`${segBrg.toFixed(0)}° ${segDist.toFixed(2)}NM`)
         .addTo(map);
-      ruler.layers.push(label);
     }
 
-    let totalDist = 0;
-    for (let i = 1; i < ruler.points.length; i++) {
-      totalDist += distanceNm(
-        { lat: ruler.points[i - 1].lat, lon: ruler.points[i - 1].lng },
-        { lat: ruler.points[i].lat, lon: ruler.points[i].lng }
-      );
-    }
-    setInfo(`${ruler.points.length} pts · Total: ${totalDist.toFixed(2)}NM`);
+    state.ruler.vertices.push(vertex);
+    updateInfo();
   }
 
   function onMapDblClick(e) {
-    if (!ruler.active) return;
+    if (state.activeTool !== 'ruler') return;
     deactivateRuler();
     const btn = document.querySelector('#btn-ruler');
     if (btn) setBtnActive(btn, false);
   }
 
+  function onKeyDown(e) {
+    if (state.activeTool === 'ruler') {
+      if (e.key === 'Escape') {
+        clearRuler();
+        deactivateRuler();
+        const btn = document.querySelector('#btn-ruler');
+        if (btn) setBtnActive(btn, false);
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        undoLastPoint();
+      }
+    }
+  }
+
+  function onContextMenu(e) {
+    if (state.activeTool === 'ruler') {
+      L.DomEvent.stopPropagation(e);
+      e.originalEvent.preventDefault();
+      undoLastPoint();
+      return false;
+    }
+  }
+
   map.on('click', onMapClick);
   map.on('dblclick', onMapDblClick);
+  map.on('contextmenu', onContextMenu);
+  document.addEventListener('keydown', onKeyDown);
+
+  function updateBarLabel(bar) {
+    const a = bar.markerA.getLatLng();
+    const b = bar.markerB.getLatLng();
+    const d = distanceNm({ lat: a.lat, lon: a.lng }, { lat: b.lat, lon: b.lng });
+    const brg = bearing({ lat: a.lat, lon: a.lng }, { lat: b.lat, lon: b.lng });
+    bar.tooltip.setContent(`${d.toFixed(2)}NM ${brg.toFixed(0)}°`);
+  }
+
+  function updateBar(bar) {
+    const a = bar.markerA.getLatLng();
+    const b = bar.markerB.getLatLng();
+    const cx = (a.lat + b.lat) / 2;
+    const cy = (a.lng + b.lng) / 2;
+
+    bar.line.setLatLngs([[a.lat, a.lng], [b.lat, b.lng]]);
+    bar.centerHandle.setLatLng([cx, cy]);
+    bar.deleteMarker.setLatLng([cx + 0.002, cy + 0.002]);
+    bar.tooltip.setLatLng([cx, cy]);
+
+    bar.offsetA = { lat: a.lat - cx, lng: a.lng - cy };
+    bar.offsetB = { lat: b.lat - cx, lng: b.lng - cy };
+
+    updateBarLabel(bar);
+  }
+
+  function removeBar(bar) {
+    map.removeLayer(bar.markerA);
+    map.removeLayer(bar.markerB);
+    map.removeLayer(bar.centerHandle);
+    map.removeLayer(bar.line);
+    map.removeLayer(bar.tooltip);
+    map.removeLayer(bar.deleteMarker);
+    const idx = state.bars.indexOf(bar);
+    if (idx !== -1) state.bars.splice(idx, 1);
+    updateInfo();
+  }
 
   function addBar() {
     const center = map.getCenter();
-    const offset = 0.03;
-    const ptA = { lat: center.lat - offset, lng: center.lng - offset * 0.6 };
-    const ptB = { lat: center.lat + offset, lng: center.lng + offset * 0.6 };
+    const targetNm = 2;
+    const latOffset = targetNm / 60;
+    const cosLat = Math.cos(center.lat * Math.PI / 180);
+    const lonOffset = targetNm / 60 / cosLat;
+
+    const ptA = { lat: center.lat - latOffset * 0.5, lng: center.lng - lonOffset * 0.3 };
+    const ptB = { lat: center.lat + latOffset * 0.5, lng: center.lng + lonOffset * 0.3 };
 
     const markerA = L.circleMarker([ptA.lat, ptA.lng], {
       radius: 7, color: '#f59e0b', fillColor: '#fbbf24', fillOpacity: 0.9, weight: 2, draggable: true
@@ -167,41 +284,53 @@ export function addChartingTools(map) {
       color: '#f59e0b', weight: 3, opacity: 0.8
     }).addTo(map);
 
-    const label = L.tooltip({ permanent: true, direction: 'top', offset: [0, -8], className: 'bar-tooltip' })
-      .setLatLng([(ptA.lat + ptB.lat) / 2, (ptA.lng + ptB.lng) / 2])
+    const cx = (ptA.lat + ptB.lat) / 2;
+    const cy = (ptA.lng + ptB.lng) / 2;
+
+    const tooltip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -8], className: 'bar-tooltip' })
+      .setLatLng([cx, cy])
       .setContent('')
       .addTo(map);
 
-    const bar = { markerA, markerB, line, label };
-    bars.push(bar);
+    const centerHandle = L.circleMarker([cx, cy], {
+      radius: 5, color: '#f59e0b', fillColor: '#fff', fillOpacity: 1, weight: 2, draggable: true
+    }).addTo(map);
+
+    const deleteMarker = L.marker([cx + 0.002, cy + 0.002], {
+      icon: L.divIcon({
+        html: '✕',
+        className: 'bar-delete-icon',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      }),
+      interactive: true
+    }).addTo(map);
+
+    const offsetA = { lat: ptA.lat - cx, lng: ptA.lng - cy };
+    const offsetB = { lat: ptB.lat - cx, lng: ptB.lng - cy };
+
+    const bar = { markerA, markerB, centerHandle, line, tooltip, deleteMarker, offsetA, offsetB };
+    state.bars.push(bar);
     updateBarLabel(bar);
 
     markerA.on('drag', () => updateBar(bar));
     markerB.on('drag', () => updateBar(bar));
 
+    centerHandle.on('drag', () => {
+      const c = centerHandle.getLatLng();
+      markerA.setLatLng([c.lat + bar.offsetA.lat, c.lng + bar.offsetA.lng]);
+      markerB.setLatLng([c.lat + bar.offsetB.lat, c.lng + bar.offsetB.lng]);
+      updateBar(bar);
+    });
+
+    deleteMarker.on('click', () => removeBar(bar));
+
+    updateInfo();
     return bar;
   }
 
-  function updateBar(bar) {
-    const a = bar.markerA.getLatLng();
-    const b = bar.markerB.getLatLng();
-    bar.line.setLatLngs([[a.lat, a.lng], [b.lat, b.lng]]);
-    bar.label.setLatLng([(a.lat + b.lat) / 2, (a.lng + b.lng) / 2]);
-    updateBarLabel(bar);
-  }
-
-  function updateBarLabel(bar) {
-    const a = bar.markerA.getLatLng();
-    const b = bar.markerB.getLatLng();
-    const d = distanceNm({ lat: a.lat, lon: a.lng }, { lat: b.lat, lon: b.lng });
-    const brg = bearing({ lat: a.lat, lon: a.lng }, { lat: b.lat, lon: b.lng });
-    bar.label.setContent(`${d.toFixed(2)}NM ${brg.toFixed(0)}°`);
-  }
-
-  function removeBar(bar) {
-    map.removeLayer(bar.markerA);
-    map.removeLayer(bar.markerB);
-    map.removeLayer(bar.line);
-    map.removeLayer(bar.label);
-  }
+  return {
+    clearAll,
+    isRulerActive: () => state.activeTool === 'ruler'
+  };
 }
