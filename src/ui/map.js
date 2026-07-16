@@ -1,3 +1,5 @@
+import { addChartingTools } from './charting-tools.js';
+
 let map = null;
 let startMarker = null;
 let endMarker = null;
@@ -8,6 +10,17 @@ let sailingDebug = null;
 let placing = 'start';
 let onPointSelected = null;
 let landOverlay = null;
+let coarseOverlay = null;
+let tileGridOverlay = null;
+let tileStateOverlay = null;
+let corridorOverlay = null;
+let roughRouteOverlay = null;
+
+const TILE_GRID_COLOR = '#6b7280';
+const TILE_FETCHED_COLOR = '#22c55e';
+const TILE_CACHED_COLOR = '#3b82f6';
+const TILE_MISSING_COLOR = '#ef4444';
+const TILE_PENDING_COLOR = '#f59e0b';
 
 export function initMap(callback) {
   onPointSelected = callback;
@@ -20,7 +33,10 @@ export function initMap(callback) {
 
   L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
 
+  addChartingTools(map);
+
   map.on('click', (e) => {
+    if (window.__chartingActive) return;
     if (placing === 'start') {
       setStart(e.latlng.lat, e.latlng.lng);
       onPointSelected('start', e.latlng.lat, e.latlng.lng);
@@ -234,6 +250,230 @@ export function clearLandOverlay() {
   }
 }
 
+export function drawCoarseOverlay(coastline) {
+  clearCoarseOverlay();
+  if (!coastline || !coastline.outerRings) return;
+
+  coarseOverlay = L.layerGroup().addTo(map);
+
+  for (const ring of coastline.outerRings) {
+    const latlngs = ring.map(p => [p.lat, p.lon]);
+    L.polygon(latlngs, {
+      color: '#7c3aed',
+      fillColor: '#7c3aed',
+      fillOpacity: 0.2,
+      weight: 2,
+      opacity: 0.6,
+      dashArray: '4 4'
+    }).addTo(coarseOverlay);
+  }
+
+  for (const seg of coastline.segments) {
+    L.polyline([[seg.a.lat, seg.a.lon], [seg.b.lat, seg.b.lon]], {
+      color: '#a78bfa',
+      weight: 1.5,
+      opacity: 0.5,
+      dashArray: '2 3'
+    }).addTo(coarseOverlay);
+  }
+}
+
+export function clearCoarseOverlay() {
+  if (coarseOverlay) {
+    map.removeLayer(coarseOverlay);
+    coarseOverlay = null;
+  }
+}
+
+export function drawTileGrid(zoom) {
+  clearTileGrid();
+  if (!map) return;
+
+  tileGridOverlay = L.layerGroup().addTo(map);
+  const bounds = map.getBounds();
+  const nw = bounds.getNorthWest();
+  const se = bounds.getSouthEast();
+
+  const x1 = Math.floor((nw.lng + 180) / 360 * Math.pow(2, zoom));
+  const x2 = Math.floor((se.lng + 180) / 360 * Math.pow(2, zoom));
+  const y1 = Math.floor((1 - Math.log(Math.tan(nw.lat * Math.PI / 180) + 1 / Math.cos(nw.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+  const y2 = Math.floor((1 - Math.log(Math.tan(se.lat * Math.PI / 180) + 1 / Math.cos(se.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+
+  for (let x = x1; x <= x2; x++) {
+    for (let y = y1; y <= y2; y++) {
+      const nLat = tileToLat(y, zoom);
+      const sLat = tileToLat(y + 1, zoom);
+      const wLon = tileToLon(x, zoom);
+      const eLon = tileToLon(x + 1, zoom);
+
+      L.rectangle([[nLat, wLon], [sLat, eLon]], {
+        color: TILE_GRID_COLOR,
+        weight: 1,
+        opacity: 0.3,
+        fill: false
+      }).addTo(tileGridOverlay);
+
+      L.marker([(nLat + sLat) / 2, (wLon + eLon) / 2], {
+        icon: L.divIcon({
+          className: 'tile-label',
+          html: `${zoom}/${x}/${y}`,
+          iconSize: [80, 12],
+          iconAnchor: [40, 6]
+        }),
+        interactive: false
+      }).addTo(tileGridOverlay);
+    }
+  }
+}
+
+export function clearTileGrid() {
+  if (tileGridOverlay) {
+    map.removeLayer(tileGridOverlay);
+    tileGridOverlay = null;
+  }
+}
+
+export function drawTileStates(manager, tileStates) {
+  clearTileStates();
+  if (!map || !manager) return;
+
+  tileStateOverlay = L.layerGroup().addTo(map);
+  const zoom = manager.tileZoom;
+  const bounds = map.getBounds();
+  const nw = bounds.getNorthWest();
+  const se = bounds.getSouthEast();
+
+  const x1 = Math.floor((nw.lng + 180) / 360 * Math.pow(2, zoom));
+  const x2 = Math.floor((se.lng + 180) / 360 * Math.pow(2, zoom));
+  const y1 = Math.floor((1 - Math.log(Math.tan(nw.lat * Math.PI / 180) + 1 / Math.cos(nw.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+  const y2 = Math.floor((1 - Math.log(Math.tan(se.lat * Math.PI / 180) + 1 / Math.cos(se.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+
+  for (let x = x1; x <= x2; x++) {
+    for (let y = y1; y <= y2; y++) {
+      const key = `${zoom}/${x}/${y}`;
+      const nLat = tileToLat(y, zoom);
+      const sLat = tileToLat(y + 1, zoom);
+      const wLon = tileToLon(x, zoom);
+      const eLon = tileToLon(x + 1, zoom);
+
+      let color = TILE_MISSING_COLOR;
+      let label = 'not needed';
+      let fillOpacity = 0.15;
+
+      const smart = manager.getSmartCoastline();
+      if (smart && smart.hasTile(zoom, x, y)) {
+        color = TILE_FETCHED_COLOR;
+        label = 'fetched';
+        fillOpacity = 0.25;
+      }
+
+      if (tileStates && tileStates.has(key)) {
+        const state = tileStates.get(key);
+        if (state === 'cached') {
+          color = TILE_CACHED_COLOR;
+          label = 'cached';
+        } else if (state === 'pending') {
+          color = TILE_PENDING_COLOR;
+          label = 'pending';
+        }
+      }
+
+      L.rectangle([[nLat, wLon], [sLat, eLon]], {
+        color,
+        weight: 1.5,
+        opacity: 0.5,
+        fillColor: color,
+        fillOpacity
+      }).addTo(tileStateOverlay);
+
+      L.marker([(nLat + sLat) / 2, (wLon + eLon) / 2], {
+        icon: L.divIcon({
+          className: 'tile-state-label',
+          html: `<span style="background:${color};color:#fff;padding:1px 4px;border-radius:2px;font-size:9px">${label}</span>`,
+          iconSize: [60, 14],
+          iconAnchor: [30, 7]
+        }),
+        interactive: false
+      }).addTo(tileStateOverlay);
+    }
+  }
+}
+
+export function clearTileStates() {
+  if (tileStateOverlay) {
+    map.removeLayer(tileStateOverlay);
+    tileStateOverlay = null;
+  }
+}
+
+export function drawCorridorOverlay(corridorPath) {
+  clearCorridorOverlay();
+  if (!corridorPath || corridorPath.length < 2) return;
+
+  corridorOverlay = L.layerGroup().addTo(map);
+
+  const latlngs = corridorPath.map(p => [p.lat, p.lon]);
+  L.polygon(latlngs, {
+    color: '#6b21a8',
+    fillColor: '#6b21a8',
+    fillOpacity: 0.08,
+    weight: 2,
+    opacity: 0.4,
+    dashArray: '8 4'
+  }).addTo(corridorOverlay);
+}
+
+export function clearCorridorOverlay() {
+  if (corridorOverlay) {
+    map.removeLayer(corridorOverlay);
+    corridorOverlay = null;
+  }
+}
+
+export function drawRoughRoute(legs) {
+  clearRoughRoute();
+  if (!legs || legs.length === 0) return;
+
+  roughRouteOverlay = L.layerGroup().addTo(map);
+
+  const points = [];
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+    if (points.length === 0 || points[points.length - 1][0] !== leg.waypoint.lat || points[points.length - 1][1] !== leg.waypoint.lon) {
+      points.push([leg.waypoint.lat, leg.waypoint.lon]);
+    }
+  }
+  const lastLeg = legs[legs.length - 1];
+  if (lastLeg.endWaypoint) {
+    points.push([lastLeg.endWaypoint.lat, lastLeg.endWaypoint.lon]);
+  }
+
+  L.polyline(points, {
+    color: '#7c3aed',
+    weight: 5,
+    opacity: 0.3,
+    dashArray: '10 8'
+  }).addTo(roughRouteOverlay);
+
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+    L.circleMarker([leg.waypoint.lat, leg.waypoint.lon], {
+      radius: 3,
+      color: '#7c3aed',
+      fillColor: '#7c3aed',
+      fillOpacity: 0.3,
+      weight: 1
+    }).addTo(roughRouteOverlay);
+  }
+}
+
+export function clearRoughRoute() {
+  if (roughRouteOverlay) {
+    map.removeLayer(roughRouteOverlay);
+    roughRouteOverlay = null;
+  }
+}
+
 export function clearRoute() {
   if (routePolyline) {
     map.removeLayer(routePolyline);
@@ -254,6 +494,12 @@ export function clearAll() {
     endMarker = null;
   }
   clearRoute();
+  clearLandOverlay();
+  clearCoarseOverlay();
+  clearTileGrid();
+  clearTileStates();
+  clearCorridorOverlay();
+  clearRoughRoute();
   placing = 'start';
 }
 
@@ -309,4 +555,13 @@ export function clearSailingDebug() {
 
 export function getMap() {
   return map;
+}
+
+function tileToLat(y, zoom) {
+  const n = Math.PI - 2 * Math.PI * y / Math.pow(2, zoom);
+  return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+
+function tileToLon(x, zoom) {
+  return x / Math.pow(2, zoom) * 360 - 180;
 }
