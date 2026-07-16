@@ -56,9 +56,24 @@ before wiring it into a Custom GPT Action.
 Nothing in this repo creates accounts or deploys on your behalf — you
 choose and operate the host.
 
+## Coastline data source (WS5)
+
+`src/data/coastlines/sw-england.json` is built from OSM land polygons
+via `tools/build-coastline-source.mjs`. That tool takes a local path to
+a downloaded shapefile — it does not fetch it for you (the archive is
+~700MB, too large for CI):
+
+1. Download **land-polygons-split-4326** from
+   https://osmdata.openstreetmap.de/data/land-polygons.html
+2. Unzip it somewhere on disk (`tools/data/` is gitignored and works
+   fine)
+3. `node tools/build-coastline-source.mjs path/to/land-polygons.shp`
+4. Then regenerate the coarse layer and tiles:
+   `node tools/simplify-coastline.mjs && node tools/generate-tiles.mjs`
+
 ## Attribution
 
-Coastline data is derived from OpenStreetMap once WS5 lands
+Coastline data is derived from OpenStreetMap
 (`osmdata.openstreetmap.de`, ODbL) — "Contains OpenStreetMap data ©
 OpenStreetMap contributors, ODbL" must be displayed wherever this
 service's output is shown to an end client.

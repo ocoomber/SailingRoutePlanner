@@ -1,0 +1,9 @@
+{
+  "name": "sailing-passage-planner-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "shapefile": "^0.6.6"
+  }
+}
