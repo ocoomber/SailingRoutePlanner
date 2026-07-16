@@ -29,8 +29,12 @@ were removed as out of date.
   package.json.
 - Open-Meteo Forecast API for wind (free, no key)
 - Coastline: two-pass tiled system (coarse bundled layer + z/x/y detail
-  tiles generated at deploy time, cached in IndexedDB). Source data swap
-  to OSM land polygons (osmdata.openstreetmap.de, ODbL) is planned (WS5)
+  tiles generated at deploy time, cached in IndexedDB). Source data:
+  `src/data/coastlines/sw-england.json` is meant to be rebuilt from OSM
+  land polygons (`osmdata.openstreetmap.de`, ODbL) via
+  `tools/build-coastline-source.mjs` (WS5 tooling exists; the actual
+  ~700MB source archive and re-run are gated on a manual download —
+  see `server/README.md`)
 - Windows PC dev environment — never assume Mac tooling
 
 ## Boat
