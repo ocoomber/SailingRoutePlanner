@@ -51,6 +51,44 @@ Isochrone method:
 - Forecast can be wrong
 - Cross-check against chart before departure
 
+## Test Suites
+- `tests/run.mjs` — Land-avoidance tests (5 routes + 1 clearance-margin test)
+- `tests/sailing-harness.mjs` — Sailing-performance tests (5 synthetic wind/tide scenarios)
+- `tests/all.mjs` — Runs both suites
+
+Run with `node tests/run.mjs`, `node tests/sailing-harness.mjs`, or `node tests/all.mjs`.
+
+## Sailing Test Harness (`tests/sailing-harness.mjs`)
+Isolates polar/heading-selection logic from coastline concerns. Five named scenarios against a fixed open-water route (50.00°N, 3.50°W → 50.00°N, 2.50°W, no land near the direct path):
+
+| Scenario | Wind | Tide | Expected |
+|---|---|---|---|
+| Dead upwind | 14kn from 270° | none | Tacking required (no-go zone) |
+| Dead downwind | 14kn from 90° | none | Gybing required (no-go zone) |
+| Beam reach | 14kn from 0° | none | Sail direct, no tack |
+| Wind shift mid-route | 270°→0° at 2h | none | Switch tack at shift |
+| Current pushing across | 14kn from 0° | 2kn from 180° | Crab into current |
+
+Wind fixture files in `src/data/test-fixtures/` match the `WindGridObject` shape — the engine consumes them identically to real Open-Meteo data. Tide data embedded in scenario metadata.
+
+### Decision Logger (`src/core/decision-logger.js`)
+Post-hoc analysis of raw route nodes. For each node, evaluates:
+- Wind direction/speed, bearing to destination, no-go zone status
+- Best port-tack and starboard-tack headings by VMG toward destination
+- Structured `DecisionRecord` with alternatives, VMG comparison, and reasoning
+
+Key exports: `analyzeRoute(rawNodes, end, polars)` → `DecisionRecord[]`
+              `evaluateDecision(node, end, polars)` → `DecisionRecord`
+
+### Explainer (`src/core/explain.js`)
+Converts `DecisionRecord` objects to plain-language sentences:
+"Wind from 270° at 14kn — dead ahead of the direct course to the destination (090°). inside the no-go zone (≤30° from wind direction). Compared port tack (VMG 3.2kn) against starboard tack (VMG 4.2kn). Chose starboard — better VMG (4.2kn vs 3.2kn)."
+
+Key exports: `formatDecision(record)` → string
+              `narrateRoute(rawNodes, route, decisions)` → string
+
+The decision record structure (`DecisionRecord`) is generic enough that a future UI could consume it directly without rework.
+
 ## Current State
 Prototyping Phase 1. Testing against the live GitHub Pages build, not a local server.
 Commit directly to main after each meaningful change — no branches, no PRs, no waiting.
