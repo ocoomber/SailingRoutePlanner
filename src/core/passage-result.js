@@ -45,6 +45,8 @@ export function buildWarnings(tidalData) {
   return warnings;
 }
 
+export const COASTLINE_ATTRIBUTION = 'Contains OpenStreetMap data © OpenStreetMap contributors, ODbL';
+
 export function buildSummary(start, end, departureTime, legs, configBlocks) {
   const totalDistanceNm = legs.reduce((s, l) => s + l.distance, 0);
   const totalDurationH = legs.reduce((s, l) => s + l.duration, 0);
@@ -59,7 +61,8 @@ export function buildSummary(start, end, departureTime, legs, configBlocks) {
     totalDurationH,
     motoringH,
     sailingH: totalDurationH - motoringH,
-    configChanges: Math.max(0, configBlocks.length - 1)
+    configChanges: Math.max(0, configBlocks.length - 1),
+    attribution: COASTLINE_ATTRIBUTION
   };
 }
 
@@ -67,7 +70,8 @@ export function buildFailureResult(start, end, departureTime, tidalData, log) {
   return {
     summary: {
       start, end, departureTime, arrivalTime: null,
-      totalDistanceNm: 0, totalDurationH: 0, motoringH: 0, sailingH: 0, configChanges: 0
+      totalDistanceNm: 0, totalDurationH: 0, motoringH: 0, sailingH: 0, configChanges: 0,
+      attribution: COASTLINE_ATTRIBUTION
     },
     configBlocks: [],
     legs: [],

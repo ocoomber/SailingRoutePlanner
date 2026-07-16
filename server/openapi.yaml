@@ -178,6 +178,7 @@ components:
             motoringH: { type: number }
             sailingH: { type: number }
             configChanges: { type: integer }
+            attribution: { type: string, description: "OpenStreetMap/ODbL attribution — display wherever this output is shown to an end client." }
         configBlocks:
           type: array
           items: { $ref: '#/components/schemas/ConfigBlock' }
