@@ -47,8 +47,13 @@ async function onCalculate() {
     return;
   }
 
-  if (!polars || !coastline) {
+  if (!coastline) {
     showError('Data not loaded yet. Please wait a moment.');
+    return;
+  }
+
+  if (!inputs.geometryMode && !polars) {
+    showError('Polar data not loaded yet. Please wait a moment.');
     return;
   }
 
@@ -84,21 +89,31 @@ async function onCalculate() {
       ? arrivalTime.toISOString()
       : new Date(departureTime.getTime() + 48 * 3600000).toISOString();
 
-    const windGrid = await fetchWindGrid(area, departureISO, endTime);
+    let windGrid = null;
+    if (!inputs.geometryMode) {
+      windGrid = await fetchWindGrid(area, departureISO, endTime);
+    }
 
     const tidalCurrent = inputs.tidalEnabled ? parseTidalData(inputs.tidalData) : null;
 
-    const { route, log } = calculateRoute({
+    const routeParams = {
       start,
       end,
       departureTime: departureISO,
-      polars,
       coastline,
-      windGrid,
       timeStepMinutes: inputs.timeStep,
       headingThreshold: inputs.headingThreshold,
       tidalCurrent
-    });
+    };
+
+    if (inputs.geometryMode) {
+      routeParams.constantSpeedKn = 6;
+    } else {
+      routeParams.polars = polars;
+      routeParams.windGrid = windGrid;
+    }
+
+    const { route, log } = calculateRoute(routeParams);
 
     hideLoading();
     showLog(log);

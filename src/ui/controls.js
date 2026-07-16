@@ -12,7 +12,8 @@ export function getInputs() {
     timeStep: parseInt(document.getElementById('time-step').value, 10),
     headingThreshold: parseInt(document.getElementById('heading-threshold').value, 10),
     tidalEnabled: document.getElementById('enable-tides').checked,
-    tidalData: document.getElementById('tide-data').value
+    tidalData: document.getElementById('tide-data').value,
+    geometryMode: document.getElementById('geometry-mode').checked
   };
 }
 

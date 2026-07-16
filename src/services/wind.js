@@ -1,28 +1,38 @@
 const API_BASE = 'https://api.open-meteo.com/v1/forecast';
+const RATE_LIMIT_MS = 150;
 
 export async function fetchWindGrid(area, startTime, endTime) {
   const points = samplePoints(area, 4);
   const startDate = startTime.slice(0, 10);
   const endDate = endTime.slice(0, 10);
 
-  const params = new URLSearchParams({
-    latitude: points.map(p => p.lat.toFixed(4)).join(','),
-    longitude: points.map(p => p.lon.toFixed(4)).join(','),
-    hourly: 'wind_speed_10m,wind_direction_10m',
-    start_date: startDate,
-    end_date: endDate,
-    wind_speed_unit: 'kn',
-    timezone: 'UTC'
-  });
+  const results = [];
+  for (const p of points) {
+    const params = new URLSearchParams({
+      latitude: p.lat,
+      longitude: p.lon,
+      hourly: 'wind_speed_10m,wind_direction_10m',
+      start_date: startDate,
+      end_date: endDate,
+      wind_speed_unit: 'kn',
+      timezone: 'UTC'
+    });
 
-  const resp = await fetch(`${API_BASE}?${params}`);
-  if (!resp.ok) {
-    const msg = points.map(p => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`).join('; ');
-    throw new Error(`Wind API error: ${resp.status} for ${msg}`);
+    const resp = await fetch(`${API_BASE}?${params}`);
+    if (!resp.ok) {
+      throw new Error(`Wind API error: ${resp.status} for ${p.lat.toFixed(4)},${p.lon.toFixed(4)}`);
+    }
+
+    const data = await resp.json();
+    if (data.error) {
+      throw new Error(`Wind API error: ${data.reason}`);
+    }
+
+    results.push(data);
+    await new Promise(r => setTimeout(r, RATE_LIMIT_MS));
   }
 
-  const data = await resp.json();
-  return parseWindResponse(data, points);
+  return parseWindResponse(results, points);
 }
 
 function samplePoints(area, gridSize) {
@@ -42,8 +52,8 @@ function samplePoints(area, gridSize) {
   return points;
 }
 
-function parseWindResponse(data, points) {
-  const times = data.hourly.time;
+function parseWindResponse(results, points) {
+  const times = results[0].hourly.time;
   const grid = [];
 
   for (let t = 0; t < times.length; t++) {
@@ -53,8 +63,8 @@ function parseWindResponse(data, points) {
       timeEntry.points.push({
         lat: points[p].lat,
         lon: points[p].lon,
-        speed: data.hourly.wind_speed_10m[p][t],
-        direction: data.hourly.wind_direction_10m[p][t]
+        speed: results[p].hourly.wind_speed_10m[t],
+        direction: results[p].hourly.wind_direction_10m[t]
       });
     }
 
