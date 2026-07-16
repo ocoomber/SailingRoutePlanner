@@ -13,6 +13,7 @@ export const DEFAULT_COMFORT_PARAMS = {
   headsailSpeedFactor: 0.6,
   reefedSpeedFactor: 0.85,
   headsailPreferenceBandKn: 3,
+  tackPenaltyKn: 0.8,
   noGoAngleDeg: null
 };
 
@@ -56,6 +57,10 @@ function validate(params) {
     if (typeof value !== 'number' || !isFinite(value) || value <= 0) {
       errors.push(`${field} must be a positive number, got ${JSON.stringify(value)}`);
     }
+  }
+
+  if (typeof params.tackPenaltyKn !== 'number' || !isFinite(params.tackPenaltyKn) || params.tackPenaltyKn < 0) {
+    errors.push(`tackPenaltyKn must be a non-negative number, got ${JSON.stringify(params.tackPenaltyKn)}`);
   }
 
   if (params.noGoAngleDeg !== null) {

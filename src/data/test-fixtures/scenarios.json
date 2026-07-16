@@ -44,5 +44,15 @@
     "end": { "lat": 50.00, "lon": -2.50 },
     "expectRoute": true,
     "expectTack": false
+  },
+  {
+    "name": "Slowly veering wind",
+    "description": "Wind veers 2 degrees per hour (like real Open-Meteo forecast) — router must not dither between tacks; maneuver count must stay low",
+    "windFixture": "wind-veering.json",
+    "start": { "lat": 50.00, "lon": -3.50 },
+    "end": { "lat": 50.00, "lon": -2.98 },
+    "expectRoute": true,
+    "expectTack": true,
+    "maxManeuvers": 3
   }
 ]

@@ -21,7 +21,7 @@ export async function calculateRoute(params) {
     timeStepMinutes, headingThreshold, tidalCurrent,
     polars, windGrid,
     constantSpeedKn, clearanceMarginNm, noGoAngleDeg,
-    arriveByTime, allowIntoWind
+    arriveByTime, allowIntoWind, tackPenaltyKn = 0
   } = params;
 
   const timeStepHours = timeStepMinutes / 60;
@@ -115,12 +115,20 @@ export async function calculateRoute(params) {
 
         const distToEnd = distanceNm(newPoint, end);
 
+        const maneuvered = node.twa !== 0 && twaVal !== 0 &&
+          Math.sign(node.twa) !== Math.sign(twaVal);
+        const maneuverPenalty = (node.maneuverPenalty || 0) +
+          (maneuvered ? tackPenaltyKn * timeStepHours : 0);
+        const cost = distToEnd + maneuverPenalty;
+
         nextIsochrone.push({
           point: newPoint,
           heading: moveVector.direction,
           parent: node,
           time: addHours(node.time, timeStepHours),
           distToEnd,
+          cost,
+          maneuverPenalty,
           sog: moveVector.speed,
           twa: twaVal,
           windSpeed: windSpd,
@@ -134,7 +142,7 @@ export async function calculateRoute(params) {
       break;
     }
 
-    nextIsochrone.sort((a, b) => a.distToEnd - b.distToEnd);
+    nextIsochrone.sort((a, b) => a.cost - b.cost);
 
     if (nextIsochrone.length > maxIsochroneSize) {
       nextIsochrone.length = maxIsochroneSize;
@@ -161,7 +169,10 @@ export async function calculateRoute(params) {
     history.push(pruned);
     isochrone = pruned;
 
-    const closest = isochrone[0];
+    let closest = isochrone[0];
+    for (const node of isochrone) {
+      if (node.distToEnd < closest.distToEnd) closest = node;
+    }
 
     if (step % 5 === 0 || closest.distToEnd < 2) {
       log.push(`[Step ${step}] Best: ${closest.point.lat.toFixed(4)},${closest.point.lon.toFixed(4)} dist ${closest.distToEnd.toFixed(1)}NM candidates ${nextIsochrone.length}→${pruned.length}`);
@@ -237,7 +248,7 @@ export async function calculateRoute(params) {
 }
 
 function pruneIsochrone(points, minDistNm) {
-  const sorted = [...points].sort((a, b) => a.distToEnd - b.distToEnd);
+  const sorted = [...points].sort((a, b) => (a.cost ?? a.distToEnd) - (b.cost ?? b.distToEnd));
   const kept = [];
 
   for (const p of sorted) {

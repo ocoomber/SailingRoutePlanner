@@ -41,6 +41,7 @@ export async function planPassage(input) {
     tidalCurrent: tidalData,
     clearanceMarginNm,
     noGoAngleDeg: params.noGoAngleDeg,
+    tackPenaltyKn: params.tackPenaltyKn,
     headingsPerStep: opts.headingsPerStep,
     maxSteps: opts.maxSteps
   });

@@ -148,6 +148,23 @@ up polar speed, apply wind + optional tidal vector, discard
 land-crossing candidates (`crossesLand`), cap and prune the isochrone,
 backtrack, simplify legs.
 
+**Maneuver-cost bias (`tackPenaltyKn`, comfort param):** isochrone
+candidates are ranked by `cost = distToEnd + accumulatedManeuverPenalty`,
+not raw `distToEnd`. Each step that flips the boat's TWA sign (tack or
+gybe) adds `tackPenaltyKn * timeStepHours` NM to a penalty that
+**accumulates along the path**, so a route that dithered many times loses
+to a cleaner one reaching the same frontier. This models the real cost of
+a maneuver and stops the router flipping tack/gybe on sub-NM VMG
+differences under realistic slowly-veering wind (the earlier "56 legs /
+14 tacks / 25 gybes" St Mawes→Newlyn symptom). A per-step (non-
+accumulating) penalty was tried first and was too weak/noisy — the merge
+in `simplifyLegs` also can't fix this, since it runs after route
+selection and never merges across a TWA-sign change. Arrival/arrive-by
+checks still use true `distToEnd`. Default 0.8kn; 0 disables it and
+restores raw-distance ranking (the default for direct `calculateRoute`
+callers like `tests/run.mjs` and the UI Route-only debug path, which
+don't pass comfort params).
+
 **Built (WS2):** a Tier-1 configuration planner
 (`src/core/config-planner.js`) decides motor / headsail / full / reefed
 blocks from duration-vs-hassle comfort logic
@@ -192,8 +209,11 @@ debug checks.
 ## Test Suites
 - `tests/run.mjs` — Land-avoidance (6 routes/cases)
 - `tests/sailing-harness.mjs` — Sailing logic / Tier 2 in isolation
-  (5 synthetic wind/tide scenarios + 3 edge cases), fixtures in
-  `src/data/test-fixtures/`
+  (6 synthetic wind/tide scenarios + 3 edge cases), fixtures in
+  `src/data/test-fixtures/`. The "Slowly veering wind" scenario
+  (`wind-veering.json`, 2°/hr veer) asserts `maxManeuvers <= 3` — it
+  guards the tack/gybe dithering fixed by `tackPenaltyKn`; with the
+  penalty at 0 it produces 5+ maneuvers and fails.
 - `tests/coastline-system.mjs` — Tiling/coastline system (48 checks)
 - `tests/comfort-harness.mjs` — Comfort/Tier-1 config planner, full
   `planPassage()` end-to-end (6 scenarios: light air, long beam reach,
