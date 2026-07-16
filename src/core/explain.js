@@ -66,6 +66,11 @@ export function formatDecision(rec) {
   return parts.join('. ') + '.';
 }
 
+export function formatLandDeviation(rec) {
+  const sacrificed = (rec.rejectedVmg - rec.chosenVmg).toFixed(1);
+  return `Ideal heading ${rec.rejectedHeading}° (VMG ${rec.rejectedVmg.toFixed(1)}kn) blocked by land/clearance — deviated to ${rec.chosenHeading}° (VMG ${rec.chosenVmg.toFixed(1)}kn), sacrificing ${sacrificed}kn toward the destination.`;
+}
+
 export function formatTransition(transition) {
   const lines = [transition.statLine];
   lines.push(transition.explanation);
@@ -101,7 +106,7 @@ export function narrateRoute(rawNodes, route, decisions) {
   for (let i = 0; i < decisions.length; i++) {
     const rec = decisions[i];
     lines.push(`[Step ${rec.step}] ${rec.position.lat.toFixed(3)},${rec.position.lon.toFixed(3)} at ${rec.time.slice(11, 16)}Z`);
-    lines.push(`  ${formatDecision(rec)}`);
+    lines.push(`  ${rec.kind === 'landDeviation' ? formatLandDeviation(rec) : formatDecision(rec)}`);
     lines.push(``);
   }
 

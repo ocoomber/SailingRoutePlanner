@@ -117,6 +117,7 @@ export function evaluateDecision(node, end, polars) {
   }
 
   return {
+    kind: 'heading',
     step: 0,
     position: { lat: round1(node.point.lat), lon: round1(node.point.lon) },
     time: node.time,
@@ -154,6 +155,19 @@ export function analyzeRoute(rawNodes, end, polars) {
     const rec = evaluateDecision(node, end, polars);
     rec.step = i;
     decisions.push(rec);
+
+    if (node.landDeviation) {
+      decisions.push({
+        kind: 'landDeviation',
+        step: i,
+        time: node.time,
+        position: { lat: round1(node.point.lat), lon: round1(node.point.lon) },
+        rejectedHeading: node.landDeviation.rejectedHeading,
+        rejectedVmg: node.landDeviation.rejectedVmg,
+        chosenHeading: Math.round(node.heading),
+        chosenVmg: node.landDeviation.chosenVmg
+      });
+    }
   }
 
   return decisions;

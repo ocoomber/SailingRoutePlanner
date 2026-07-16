@@ -8,6 +8,8 @@ const MAX_ISOCHRONE_SIZE = 200;
 const YIELD_INTERVAL_MS = 50;
 const VMG_STABILITY_THRESHOLD = 0.5;
 const MIN_LEG_DISTANCE_NM = 0.1;
+const LAND_DEVIATION_VMG_THRESHOLD = 0.5;
+const DEG_TO_RAD = Math.PI / 180;
 
 function yieldControl() {
   return new Promise(resolve => setTimeout(resolve, 0));
@@ -53,11 +55,14 @@ export async function calculateRoute(params) {
 
   for (let step = 0; step < maxSteps; step++) {
     const nextIsochrone = [];
+    const bestRejectedByNode = new Map();
 
     const nHeadings = params.headingsPerStep || DEFAULT_HEADINGS;
     const headingStep = 360 / nHeadings;
 
     for (const node of isochrone) {
+      const brgToEnd = bearing(node.point, end);
+
       for (let h = 0; h < 360; h += headingStep) {
         let boatSpeed;
         let twaVal = 0;
@@ -100,6 +105,11 @@ export async function calculateRoute(params) {
           if (step < 3) {
             log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);
           }
+          const rejectedVmg = moveVector.speed * Math.cos((moveVector.direction - brgToEnd) * DEG_TO_RAD);
+          const existing = bestRejectedByNode.get(node);
+          if (!existing || rejectedVmg > existing.vmg) {
+            bestRejectedByNode.set(node, { heading: moveVector.direction, vmg: rejectedVmg });
+          }
           continue;
         }
 
@@ -131,6 +141,23 @@ export async function calculateRoute(params) {
     }
 
     const pruned = pruneIsochrone(nextIsochrone, 0.5);
+
+    for (const survivor of pruned) {
+      const rejected = bestRejectedByNode.get(survivor.parent);
+      if (!rejected) continue;
+
+      const brgToEnd = bearing(survivor.parent.point, end);
+      const chosenVmg = survivor.sog * Math.cos((survivor.heading - brgToEnd) * DEG_TO_RAD);
+
+      if (rejected.vmg - chosenVmg > LAND_DEVIATION_VMG_THRESHOLD) {
+        survivor.landDeviation = {
+          rejectedHeading: Math.round(rejected.heading),
+          rejectedVmg: Math.round(rejected.vmg * 10) / 10,
+          chosenVmg: Math.round(chosenVmg * 10) / 10
+        };
+      }
+    }
+
     history.push(pruned);
     isochrone = pruned;
 
