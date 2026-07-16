@@ -1,12 +1,12 @@
 import { bearing } from './geometry.js';
 
 export function pointOfSailCategory(windAngle) {
-  if (windAngle < 30) return 'dead downwind';
-  if (windAngle < 60) return 'broad reach';
-  if (windAngle < 100) return 'beam reach';
-  if (windAngle < 140) return 'close reach';
-  if (windAngle < 160) return 'close hauled';
-  return 'into wind';
+  if (windAngle < 30) return 'into wind';
+  if (windAngle < 60) return 'close hauled';
+  if (windAngle < 100) return 'close reach';
+  if (windAngle < 140) return 'beam reach';
+  if (windAngle < 160) return 'broad reach';
+  return 'dead downwind';
 }
 
 function deltaDeg(a, b) {
@@ -59,8 +59,18 @@ export function classifyTransition(prevLeg, nextLeg, destination) {
   } else if (category === 'wind-shift') {
     const dirDesc = dWindDir > 0 ? 'veered' : dWindDir < 0 ? 'backed' : 'shifted';
     explanation = `Wind ${dirDesc} from ${prevLeg.windSpeed}kn/${prevLeg.windDir}\u00B0 to ${nextLeg.windSpeed}kn/${nextLeg.windDir}\u00B0 — a ${Math.abs(dWindDir)}\u00B0 shift. Heading adjusted from ${prevLeg.heading}\u00B0 to ${nextLeg.heading}\u00B0 to hold the optimal ${nextCat} angle on the new wind, staying on ${prevLeg.tackSide === nextLeg.tackSide ? 'the same tack' : 'the other side'}.`;
-  } else if (category === 'tack' || category === 'gybe') {
-    explanation = `Wind moved into the no-go zone. ${category === 'tack' ? 'Tacked' : 'Gybed'} from ${prevLeg.tackSide || '?'} tack to ${nextLeg.tackSide || '?'} tack.`;
+  } else if (category === 'tack') {
+    if (Math.abs(dWindDir) >= 5) {
+      explanation = `Wind shifted ${Math.abs(dWindDir).toFixed(0)}\u00B0 as the boat progressed, moving the optimal course across the wind. Tacked from ${prevLeg.tackSide || '?'} to ${nextLeg.tackSide || '?'} to keep making progress toward the destination.`;
+    } else {
+      explanation = `Bearing to the destination shifted as the boat progressed. Tacked from ${prevLeg.tackSide || '?'} to ${nextLeg.tackSide || '?'} — continuing on the previous tack would have taken the boat away from the destination.`;
+    }
+  } else if (category === 'gybe') {
+    if (Math.abs(dWindDir) >= 5) {
+      explanation = `Wind shifted ${Math.abs(dWindDir).toFixed(0)}\u00B0 as the boat progressed, moving the optimal course across the wind. Gybed from ${prevLeg.tackSide || '?'} to ${nextLeg.tackSide || '?'} to keep making progress toward the destination.`;
+    } else {
+      explanation = `Bearing to the destination shifted as the boat progressed. Gybed from ${prevLeg.tackSide || '?'} to ${nextLeg.tackSide || '?'} — continuing on the previous gybe would have taken the boat away from the destination.`;
+    }
   }
 
   return {

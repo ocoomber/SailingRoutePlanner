@@ -6,6 +6,9 @@ import { interpolateWind } from './wind-interpolation.js';
 const DEFAULT_HEADINGS = 36;
 const MAX_ISOCHRONE_SIZE = 200;
 const YIELD_INTERVAL_MS = 50;
+const MIN_TWA = 30;
+const VMG_STABILITY_THRESHOLD = 0.5;
+const MIN_LEG_DISTANCE_NM = 0.1;
 
 function yieldControl() {
   return new Promise(resolve => setTimeout(resolve, 0));
@@ -69,6 +72,10 @@ export async function calculateRoute(params) {
           windSpd = wind.speed;
           const raw = h - wind.direction;
           twaVal = ((raw % 360) + 540) % 360 - 180;
+          if (Math.abs(twaVal) < MIN_TWA) {
+            zeroSpeed++;
+            continue;
+          }
           boatSpeed = lookupSpeed(polars, Math.abs(twaVal), wind.speed);
         }
 
@@ -232,6 +239,9 @@ function simplifyLegs(path, threshold) {
 
   if (firstRealIdx >= path.length) return [];
 
+  const endPoint = path[path.length - 1].point;
+  const toRad = d => d * Math.PI / 180;
+
   const legs = [];
   let legStart = path[0];
   let lastHeading = path[firstRealIdx].heading;
@@ -247,13 +257,31 @@ function simplifyLegs(path, threshold) {
     const headingDiff = Math.abs(normalizeAngle(path[i].heading - lastHeading));
 
     if (headingDiff >= threshold) {
-      const durationMs = new Date(path[i].time) - new Date(legStart.time);
       const endNode = path[i - 1];
       const distance = distanceNm(legStart.point, endNode.point);
       const avgSog = totalSog / sogCount;
-      const avgTwa = totalTwa / windCount;
-      const avgWindSpeed = totalWindSpeed / windCount;
-      const avgWindDir = totalWindDir / windCount;
+
+      const newTwaSign = Math.sign(path[i].twa);
+      const twaSignChanged = prevTwaSign !== 0 && newTwaSign !== 0 && prevTwaSign !== newTwaSign;
+
+      if (!twaSignChanged) {
+        const brgToEnd = bearing(endNode.point, endPoint);
+        const oldVMG = avgSog * Math.cos(toRad(lastHeading - brgToEnd));
+        const newVMG = path[i].sog * Math.cos(toRad(path[i].heading - brgToEnd));
+
+        if (Math.abs(oldVMG - newVMG) < VMG_STABILITY_THRESHOLD) {
+          lastHeading = path[i].heading;
+          totalSog += path[i].sog;
+          sogCount++;
+          totalTwa += path[i].twa;
+          totalWindSpeed += path[i].windSpeed;
+          totalWindDir += path[i].windDir;
+          windCount++;
+          continue;
+        }
+      }
+
+      const durationMs = new Date(path[i].time) - new Date(legStart.time);
 
       legs.push({
         heading: Math.round(lastHeading),
@@ -262,17 +290,16 @@ function simplifyLegs(path, threshold) {
         duration: durationMs / 3600000,
         distance,
         sog: avgSog,
-        windAngle: Math.round(Math.abs(avgTwa)),
-        windSpeed: Math.round(avgWindSpeed),
-        windDir: Math.round(avgWindDir),
-        windDescription: describeWind(avgTwa),
+        windAngle: Math.round(Math.abs(totalTwa / windCount)),
+        windSpeed: Math.round(totalWindSpeed / windCount),
+        windDir: Math.round(totalWindDir / windCount),
+        windDescription: describeWind(totalTwa / windCount),
         maneuver: null,
-        tackSide: avgTwa > 0 ? 'port' : avgTwa < 0 ? 'starboard' : null
+        tackSide: (totalTwa / windCount) > 0 ? 'port' : (totalTwa / windCount) < 0 ? 'starboard' : null
       });
 
-      const newTwaSign = Math.sign(path[i].twa);
       if (prevTwaSign !== 0 && newTwaSign !== 0 && prevTwaSign !== newTwaSign) {
-        const absAvgTwa = Math.abs(avgTwa);
+        const absAvgTwa = Math.abs(totalTwa / windCount);
         const isTack = absAvgTwa <= 90;
         const maneuver = isTack ? 'tack' : 'gybe';
         if (legs.length >= 1) {
@@ -280,7 +307,7 @@ function simplifyLegs(path, threshold) {
         }
         console.log('[Maneuver]', maneuver,
           `TWA sign ${prevTwaSign}→${newTwaSign}`,
-          `avgTwa ${avgTwa.toFixed(1)}°`,
+          `avgTwa ${(totalTwa / windCount).toFixed(1)}°`,
           `leg ${legs.length - 1} heading ${legs[legs.length - 1].heading}°`,
           `windDir ${legs[legs.length - 1].windDir}°`);
       }
@@ -310,8 +337,6 @@ function simplifyLegs(path, threshold) {
   const distance = distanceNm(legStart.point, lastNode.point);
   const avgSog = totalSog / sogCount;
   const avgTwa = totalTwa / windCount;
-  const avgWindSpeed = totalWindSpeed / windCount;
-  const avgWindDir = totalWindDir / windCount;
 
   legs.push({
     heading: Math.round(lastHeading),
@@ -321,12 +346,30 @@ function simplifyLegs(path, threshold) {
     distance,
     sog: avgSog,
     windAngle: Math.round(Math.abs(avgTwa)),
-    windSpeed: Math.round(avgWindSpeed),
-    windDir: Math.round(avgWindDir),
+    windSpeed: Math.round(totalWindSpeed / windCount),
+    windDir: Math.round(totalWindDir / windCount),
     windDescription: describeWind(avgTwa),
     maneuver: null,
     tackSide: avgTwa > 0 ? 'port' : avgTwa < 0 ? 'starboard' : null
   });
+
+  if (legs.length > 1) {
+    const merged = [legs[0]];
+    for (let i = 1; i < legs.length; i++) {
+      const prev = merged[merged.length - 1];
+      const cur = legs[i];
+      if (cur.distance < MIN_LEG_DISTANCE_NM || cur.duration < 0.25) {
+        prev.endWaypoint = cur.endWaypoint;
+        prev.duration += cur.duration;
+        prev.distance += cur.distance;
+        prev.sog = prev.distance / prev.duration;
+        if (cur.maneuver) prev.maneuver = cur.maneuver;
+      } else {
+        merged.push(cur);
+      }
+    }
+    return merged;
+  }
 
   return legs;
 }
@@ -335,12 +378,12 @@ function describeWind(twa) {
   const absAngle = Math.abs(twa);
   const side = twa >= 0 ? 'port' : 'starboard';
 
-  if (absAngle < 30) return `dead downwind`;
-  if (absAngle < 60) return `broad reach, wind on ${side}`;
-  if (absAngle < 100) return `beam reach, wind on ${side}`;
-  if (absAngle < 140) return `close reach, wind on ${side}`;
-  if (absAngle < 160) return `close hauled, wind on ${side}`;
-  return `into wind`;
+  if (absAngle < 30) return `into wind`;
+  if (absAngle < 60) return `close hauled, wind on ${side}`;
+  if (absAngle < 100) return `close reach, wind on ${side}`;
+  if (absAngle < 140) return `beam reach, wind on ${side}`;
+  if (absAngle < 160) return `broad reach, wind on ${side}`;
+  return `dead downwind`;
 }
 
 function normalizeAngle(deg) {

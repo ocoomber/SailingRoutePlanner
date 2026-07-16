@@ -10,12 +10,12 @@ function windDescription(windDir, bearingToDest) {
 function describeTwa(twa) {
   const absAngle = Math.abs(twa);
   const side = twa >= 0 ? 'port' : 'starboard';
-  if (absAngle < 30) return 'dead downwind';
-  if (absAngle < 60) return `broad reach, wind on ${side}`;
-  if (absAngle < 100) return `beam reach, wind on ${side}`;
-  if (absAngle < 140) return `close reach, wind on ${side}`;
-  if (absAngle < 160) return `close hauled, wind on ${side}`;
-  return 'into wind';
+  if (absAngle < 30) return 'into wind';
+  if (absAngle < 60) return `close hauled, wind on ${side}`;
+  if (absAngle < 100) return `close reach, wind on ${side}`;
+  if (absAngle < 140) return `beam reach, wind on ${side}`;
+  if (absAngle < 160) return `broad reach, wind on ${side}`;
+  return 'dead downwind';
 }
 
 function tackName(twa) {
