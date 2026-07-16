@@ -90,8 +90,8 @@ export function crossesLand(coastline, a, b, startPt, endPt) {
   const dB = nearestNm(b, coastline.grid);
 
   if (segsCross(coastline.grid, a, b)) {
-    if (dA < SAFE_DIST_NM && dB < SAFE_DIST_NM) {
-    } else if (startPt && nearestNm(startPt, coastline.grid) < SAFE_DIST_NM && distanceNm(startPt, a) < 1) {
+    if (startPt && nearestNm(startPt, coastline.grid) < SAFE_DIST_NM && distanceNm(startPt, a) < 1) {
+      if (inAnyPolygon(b, coastline.outerRings)) return true;
     } else if (endPt && nearestNm(endPt, coastline.grid) < SAFE_DIST_NM && distanceNm(endPt, b) < 1) {
     } else {
       return true;
