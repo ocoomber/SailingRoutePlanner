@@ -11,6 +11,7 @@ import {
 } from './passage-result.js';
 
 const COARSE_CLEARANCE_NM = 2;
+const NARROW_HARBOUR_CLEARANCE_NM = 0.5;
 
 const DEFAULT_ROUTER_OPTS = {
   timeStepMinutes: 30,
@@ -30,7 +31,7 @@ export async function planPassage(input) {
   const params = mergeComfortParams(comfortParams || {});
   const opts = { ...DEFAULT_ROUTER_OPTS, ...(routerOpts || {}) };
 
-  const coarseResult = await calculateRoute({
+  const runCoarsePass = (clearanceMarginNm) => calculateRoute({
     start, end, departureTime,
     coastline: coastlineCoarse,
     timeStepMinutes: opts.timeStepMinutes,
@@ -38,11 +39,17 @@ export async function planPassage(input) {
     polars: getPolarForConfig(basePolars, 'full', params),
     windGrid,
     tidalCurrent: tidalData,
-    clearanceMarginNm: COARSE_CLEARANCE_NM,
+    clearanceMarginNm,
     noGoAngleDeg: params.noGoAngleDeg,
     headingsPerStep: opts.headingsPerStep,
     maxSteps: opts.maxSteps
   });
+
+  let coarseResult = await runCoarsePass(COARSE_CLEARANCE_NM);
+
+  if ((!coarseResult.route || coarseResult.route.length === 0) && NARROW_HARBOUR_CLEARANCE_NM < COARSE_CLEARANCE_NM) {
+    coarseResult = await runCoarsePass(NARROW_HARBOUR_CLEARANCE_NM);
+  }
 
   if (!coarseResult.route || coarseResult.route.length === 0) {
     return buildFailureResult(start, end, departureTime, tidalData, coarseResult.log);
