@@ -10,7 +10,7 @@
 <body>
   <header>
     <h1>Sailing Passage Planner</h1>
-    <p class="subtitle">Phase 1 — Pre-departure planning for SW England waters — <span class="build-number">Build 35 — 2026-07-16 10:50 UTC</span></p>
+    <p class="subtitle">Phase 1 — Pre-departure planning for SW England waters — <span class="build-number">Build 36 — 2026-07-16 11:02 UTC</span></p>
   </header>
 
   <main>
@@ -81,6 +81,29 @@
             <input type="checkbox" id="show-sailing-debug">
             <label for="show-sailing-debug">Show sailing debug <span class="hint">(tack colors, TWA labels)</span></label>
           </div>
+          <details class="debug-section">
+            <summary>Coastline debug</summary>
+            <div class="input-row checkbox-row">
+              <input type="checkbox" id="show-coarse-overlay">
+              <label for="show-coarse-overlay">Coarse map layer</label>
+            </div>
+            <div class="input-row checkbox-row">
+              <input type="checkbox" id="show-tile-grid">
+              <label for="show-tile-grid">Tile grid overlay</label>
+            </div>
+            <div class="input-row checkbox-row">
+              <input type="checkbox" id="show-tile-states">
+              <label for="show-tile-states">Tile state colour-coding</label>
+            </div>
+            <div class="input-row checkbox-row">
+              <input type="checkbox" id="show-corridor">
+              <label for="show-corridor">Corridor overlay</label>
+            </div>
+            <div class="input-row checkbox-row">
+              <input type="checkbox" id="show-rough-route">
+              <label for="show-rough-route">Rough route path</label>
+            </div>
+          </details>
           <div class="input-row">
             <label for="clearance-margin">Coastal Clearance (NM)</label>
             <input type="number" id="clearance-margin" value="0.5" min="0" max="2" step="0.1">

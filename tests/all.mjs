@@ -30,6 +30,7 @@ function run(label, script) {
 
 const landPassed = run('Land-avoidance tests', 'run.mjs');
 const sailingPassed = run('Sailing-performance tests', 'sailing-harness.mjs');
+const coastlinePassed = run('Coastline system tests', 'coastline-system.mjs');
 
 console.log(`\n${'='.repeat(60)}`);
 if (totalFailed === 0) {
