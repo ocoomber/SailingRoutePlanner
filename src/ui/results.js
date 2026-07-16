@@ -1,5 +1,5 @@
 import { classifyTransition, classifyInitial, summarizeTransitions } from '../core/classify-transition.js';
-import { formatTransition, formatInitial } from '../core/explain.js';
+import { formatTransition, formatInitial, formatConfigDecision } from '../core/explain.js';
 
 function formatTime(date) {
   return date.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
@@ -40,6 +40,24 @@ function renderTransitionPanel(transition) {
   const text = document.createElement('div');
   text.className = 'transition-text';
   text.textContent = transition.explanation;
+  div.appendChild(text);
+
+  return div;
+}
+
+export function renderConfigChangePanel(rec) {
+  const div = document.createElement('div');
+  div.className = `transition-panel transition-config-change transition-config-${rec.accepted ? 'accepted' : 'rejected'}`;
+
+  const badge = document.createElement('span');
+  badge.className = `transition-badge badge-config-${rec.to}`;
+  badge.textContent = `${rec.from.toUpperCase()} → ${rec.to.toUpperCase()}${rec.accepted ? '' : ' (rejected)'}`;
+  div.appendChild(badge);
+  div.appendChild(document.createElement('br'));
+
+  const text = document.createElement('div');
+  text.className = 'transition-text';
+  text.textContent = formatConfigDecision(rec);
   div.appendChild(text);
 
   return div;
