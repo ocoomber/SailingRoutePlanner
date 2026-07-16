@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { calculateRoute } from '../src/core/router.js';
+import { calculateRoute, simplifyLegs } from '../src/core/router.js';
 import { loadPolars } from '../src/core/polar.js';
 import { loadCoastline } from '../src/core/coastline.js';
 import { analyzeRoute } from '../src/core/decision-logger.js';
@@ -98,6 +98,51 @@ async function runScenario(sc) {
   return { pass: true };
 }
 
+async function testNoFalseManeuver() {
+  const path = [
+    { heading: null, twa: 0, windDir: 136, windSpeed: 14, point: { lat: 50.0, lon: -3.5 }, time: '2026-07-16T12:00:00.000Z', sog: 0, distToEnd: 50 },
+    { heading: 230, twa: 94, windDir: 136, windSpeed: 14, point: { lat: 50.04, lon: -3.48 }, time: '2026-07-16T12:30:00.000Z', sog: 6.5, distToEnd: 48 },
+    { heading: 230, twa: 94, windDir: 136, windSpeed: 14, point: { lat: 50.08, lon: -3.46 }, time: '2026-07-16T13:00:00.000Z', sog: 6.5, distToEnd: 46 },
+    { heading: 230, twa: 94, windDir: 136, windSpeed: 14, point: { lat: 50.12, lon: -3.44 }, time: '2026-07-16T13:30:00.000Z', sog: 6.5, distToEnd: 44 },
+    { heading: 200, twa: 64, windDir: 136, windSpeed: 14, point: { lat: 50.16, lon: -3.42 }, time: '2026-07-16T14:00:00.000Z', sog: 6.5, distToEnd: 42 },
+    { heading: 200, twa: 64, windDir: 136, windSpeed: 14, point: { lat: 50.20, lon: -3.40 }, time: '2026-07-16T14:30:00.000Z', sog: 6.5, distToEnd: 40 },
+  ];
+
+  const legs = simplifyLegs(path, 15);
+
+  const hasManeuver = legs.some(leg => leg.maneuver !== null);
+  let pass = true;
+
+  if (hasManeuver) {
+    console.log(`\n=== Reported-case test ===`);
+    console.log(`  FAIL: false maneuver detected (TWA sign +94→+64 both port)`);
+    for (const leg of legs) {
+      console.log(`  ${leg.heading}°T wind ${leg.windDir}° TWA ${leg.windAngle}° ${leg.tackSide} ${leg.maneuver || ''}`);
+    }
+    pass = false;
+  }
+
+  if (legs.length >= 2) {
+    if (legs[0].windDir !== 136) {
+      if (!hasManeuver) console.log(`\n=== Reported-case test ===`);
+      console.log(`  FAIL: Leg 1 windDir=${legs[0].windDir}, expected 136 — totalWindDir accumulation bug`);
+      pass = false;
+    }
+    if (legs[1].windDir !== 136) {
+      if (!hasManeuver) console.log(`\n=== Reported-case test ===`);
+      console.log(`  FAIL: Leg 2 windDir=${legs[1].windDir}, expected 136 — same bug`);
+      pass = false;
+    }
+  }
+
+  if (pass) {
+    console.log(`\n=== Reported-case [same-tack heading change] ===`);
+    console.log(`  PASS: TWA sign consistent, no maneuver, windDir correct per leg`);
+  }
+
+  return pass;
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -106,5 +151,8 @@ for (const sc of scenarios) {
   if (pass) passed++; else failed++;
 }
 
-console.log(`\n${passed} passed, ${failed} failed out of ${scenarios.length} scenarios`);
+const edgePass = await testNoFalseManeuver();
+if (edgePass) passed++; else failed++;
+
+console.log(`\n${passed} passed, ${failed} failed out of ${scenarios.length + 1} tests (${scenarios.length} scenarios + 1 edge case)`);
 process.exit(failed > 0 ? 1 : 0);

@@ -156,7 +156,8 @@ export async function calculateRoute(params) {
             windSpeed: 0,
             windDir: 0,
             windDescription: 'calm',
-            maneuver: null
+            maneuver: null,
+            tackSide: null
           }];
           rawNodes = [
             { point: { ...start }, heading: null, time: departureTime, sog: 0, twa: 0, windSpeed: 0, windDir: 0, distToEnd: totalDist, parent: null },
@@ -265,17 +266,23 @@ function simplifyLegs(path, threshold) {
         windSpeed: Math.round(avgWindSpeed),
         windDir: Math.round(avgWindDir),
         windDescription: describeWind(avgTwa),
-        maneuver: null
+        maneuver: null,
+        tackSide: avgTwa > 0 ? 'port' : avgTwa < 0 ? 'starboard' : null
       });
 
       const newTwaSign = Math.sign(path[i].twa);
       if (prevTwaSign !== 0 && newTwaSign !== 0 && prevTwaSign !== newTwaSign) {
         const absAvgTwa = Math.abs(avgTwa);
-        const isTack = absAvgTwa > 90;
+        const isTack = absAvgTwa <= 90;
         const maneuver = isTack ? 'tack' : 'gybe';
-        if (legs.length >= 2) {
+        if (legs.length >= 1) {
           legs[legs.length - 1].maneuver = maneuver;
         }
+        console.log('[Maneuver]', maneuver,
+          `TWA sign ${prevTwaSign}→${newTwaSign}`,
+          `avgTwa ${avgTwa.toFixed(1)}°`,
+          `leg ${legs.length - 1} heading ${legs[legs.length - 1].heading}°`,
+          `windDir ${legs[legs.length - 1].windDir}°`);
       }
 
       legStart = path[i - 1];
@@ -284,6 +291,7 @@ function simplifyLegs(path, threshold) {
       sogCount = 1;
       totalTwa = path[i].twa;
       totalWindSpeed = path[i].windSpeed;
+      totalWindDir = path[i].windDir;
       windCount = 1;
       prevTwaSign = newTwaSign;
     } else {
@@ -316,7 +324,8 @@ function simplifyLegs(path, threshold) {
     windSpeed: Math.round(avgWindSpeed),
     windDir: Math.round(avgWindDir),
     windDescription: describeWind(avgTwa),
-    maneuver: null
+    maneuver: null,
+    tackSide: avgTwa > 0 ? 'port' : avgTwa < 0 ? 'starboard' : null
   });
 
   return legs;
@@ -343,6 +352,8 @@ function addHours(time, hours) {
   d.setTime(d.getTime() + hours * 3600000);
   return d.toISOString();
 }
+
+export { simplifyLegs };
 
 function getTidalVector(currents, time, departureTime) {
   const hoursSinceDep = (new Date(time) - new Date(departureTime)) / 3600000;

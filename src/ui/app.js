@@ -2,7 +2,7 @@ import { loadPolars } from '../core/polar.js';
 import { loadCoastline } from '../core/coastline.js';
 import { calculateRoute } from '../core/router.js';
 import { fetchWindGrid } from '../services/wind.js';
-import { initMap, setStart, setEnd, drawRoute, clearAll, drawLandOverlay, clearLandOverlay } from './map.js';
+import { initMap, setStart, setEnd, drawRoute, clearAll, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug } from './map.js';
 import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
 import { showResults, showError, hideResults, showLoading, hideLoading, showLog, hideLog } from './results.js';
 
@@ -130,6 +130,10 @@ async function onCalculate() {
       : null;
 
     drawRoute(route);
+    window.__lastRoute = route;
+    if (document.getElementById('show-sailing-debug').checked) {
+      drawSailingDebug(route);
+    }
     showResults(route, totalTime, inputs.timeMode, computedDeparture, targetTime);
   } catch (err) {
     hideLoading();
@@ -142,6 +146,7 @@ function onClear() {
   clearAll();
   hideResults();
   hideLog();
+  window.__lastRoute = null;
   document.getElementById('start-lat').value = '';
   document.getElementById('start-lon').value = '';
   document.getElementById('end-lat').value = '';
@@ -162,6 +167,15 @@ async function init() {
       drawLandOverlay(coastline);
     } else {
       clearLandOverlay();
+    }
+  });
+
+  document.getElementById('show-sailing-debug').addEventListener('change', (e) => {
+    if (e.target.checked) {
+      const route = window.__lastRoute;
+      if (route) drawSailingDebug(route);
+    } else {
+      clearSailingDebug();
     }
   });
 
