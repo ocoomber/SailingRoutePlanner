@@ -113,13 +113,13 @@ async function onCalculate() {
       routeParams.windGrid = windGrid;
     }
 
-    const { route, log } = calculateRoute(routeParams);
+    const { route, log } = await calculateRoute(routeParams);
 
     hideLoading();
     showLog(log);
 
     if (!route || route.length === 0) {
-      showError('No route found. See debug log below.');
+      showError('Unable to find a route — check the coastline is passable between these points, or try increasing max steps in the debug options.');
       return;
     }
 

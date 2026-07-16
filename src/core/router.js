@@ -4,8 +4,14 @@ import { crossesLand } from './coastline.js';
 import { interpolateWind } from './wind-interpolation.js';
 
 const DEFAULT_HEADINGS = 36;
+const MAX_ISOCHRONE_SIZE = 200;
+const YIELD_INTERVAL_MS = 50;
 
-export function calculateRoute(params) {
+function yieldControl() {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+export async function calculateRoute(params) {
   const {
     start, end, departureTime, coastline,
     timeStepMinutes, headingThreshold, tidalCurrent,
@@ -37,8 +43,10 @@ export function calculateRoute(params) {
   const history = [isochrone];
 
   const maxSteps = params.maxSteps || 500;
+  const maxIsochroneSize = params.maxIsochroneSize || MAX_ISOCHRONE_SIZE;
   let landBlocked = 0;
   let zeroSpeed = 0;
+  let lastYield = Date.now();
 
   for (let step = 0; step < maxSteps; step++) {
     const nextIsochrone = [];
@@ -110,6 +118,10 @@ export function calculateRoute(params) {
 
     nextIsochrone.sort((a, b) => a.distToEnd - b.distToEnd);
 
+    if (nextIsochrone.length > maxIsochroneSize) {
+      nextIsochrone.length = maxIsochroneSize;
+    }
+
     const pruned = pruneIsochrone(nextIsochrone, 0.5);
     history.push(pruned);
     isochrone = pruned;
@@ -160,6 +172,11 @@ export function calculateRoute(params) {
         log.push(`  Leg ${i + 1}: ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.distance.toFixed(1)}NM ${leg.duration.toFixed(1)}h wind ${leg.windSpeed}kn from ${leg.windDir}° ${leg.windDescription}`);
       }
       return { route, rawNodes, log: log.join('\n') };
+    }
+
+    if (Date.now() - lastYield > YIELD_INTERVAL_MS) {
+      await yieldControl();
+      lastYield = Date.now();
     }
   }
 

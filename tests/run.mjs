@@ -50,7 +50,7 @@ let failed = 0;
 for (const tc of testRoutes) {
   const t0 = Date.now();
 
-  const result = calculateRoute({
+  const result = await calculateRoute({
     start: tc.start,
     end: tc.end,
     departureTime: new Date('2026-07-15T12:00:00Z').toISOString(),
