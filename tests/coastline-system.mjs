@@ -1,10 +1,12 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import {
   lonToTileX, latToTileY, tileToLon, tileToLat,
   pointToTile, tileKey, tileBounds,
   selectTilesForCorridor, DEFAULT_TILE_ZOOM
 } from '../src/data/coastline/tile-selector.js';
 import { loadCoastline, crossesLand } from '../src/data/coastline/index.js';
+import { SmartCoastline } from '../src/data/coastline/smart-coastline.js';
+import { dedupeRings } from '../src/data/coastline/dedupe-rings.js';
 
 let passed = 0;
 let failed = 0;
@@ -144,19 +146,11 @@ console.log('\n--- SmartCoastline Merge ---');
   const coarse = loadCoastline(coarseData);
   const fine = loadCoastline(fineData);
 
-  const mergedGrid = {};
-  for (const key of Object.keys(coarse.grid)) mergedGrid[key] = coarse.grid[key];
-  for (const key of Object.keys(fine.grid)) mergedGrid[key] = fine.grid[key];
+  const landTile = pointToTile(50.15, -4.30, DEFAULT_TILE_ZOOM);
+  const loadedKeys = new Set([tileKey(DEFAULT_TILE_ZOOM, landTile.x, landTile.y)]);
+  const smartCoastline = new SmartCoastline(fine, coarse, loadedKeys);
 
-  const smartCoastline = {
-    segments: fineData.segments.concat(coarseData.segments),
-    outerRings: fineData.outerRings.concat(coarseData.outerRings),
-    innerRings: [],
-    grid: mergedGrid
-  };
-
-  const oceanPoint = { lat: 50.0, lon: -4.5 };
-  const gridKeys = Object.keys(mergedGrid);
+  const gridKeys = Object.keys(smartCoastline.grid);
   assert(gridKeys.length > 0, `merged grid has ${gridKeys.length} cells`);
 
   const waterA = { lat: 50.00, lon: -4.40 };
@@ -218,6 +212,77 @@ console.log('\n--- Coarse pass finds approximate route ---');
       assert(!coarseCrosses, `${tc.name}: coarse does not false-positive`);
     }
   }
+}
+
+console.log('\n--- Layered containment (fine where tiles loaded, coarse elsewhere) ---');
+
+{
+  const points = {
+    carrickRoads: { lat: 50.185, lon: -5.04 },
+    falmouthBay: { lat: 50.125, lon: -5.02 },
+    truroInland: { lat: 50.26, lon: -5.07 },
+    dartmoor: { lat: 50.58, lon: -3.92 }
+  };
+
+  const loadedKeys = new Set();
+  const segments = [];
+  const outerRings = [];
+  const innerRings = [];
+
+  for (const name of ['carrickRoads', 'falmouthBay', 'truroInland']) {
+    const p = points[name];
+    const t = pointToTile(p.lat, p.lon, DEFAULT_TILE_ZOOM);
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        const key = tileKey(DEFAULT_TILE_ZOOM, t.x + dx, t.y + dy);
+        const path = `tiles/coastline/${key}.json`;
+        if (loadedKeys.has(key) || !existsSync(path)) continue;
+        const tile = JSON.parse(readFileSync(path, 'utf-8'));
+        segments.push(...tile.segments);
+        outerRings.push(...(tile.outerRings || []));
+        innerRings.push(...(tile.innerRings || []));
+        loadedKeys.add(key);
+      }
+    }
+  }
+
+  const fine = loadCoastline({
+    segments,
+    outerRings: dedupeRings(outerRings),
+    innerRings: dedupeRings(innerRings)
+  });
+  const coarse = loadCoastline(JSON.parse(readFileSync('src/data/coastline/sw-england-coarse.json', 'utf-8')));
+  const smart = new SmartCoastline(fine, coarse, loadedKeys);
+
+  assert(loadedKeys.size > 0, `loaded ${loadedKeys.size} real tiles around the Fal`);
+
+  for (const name of ['carrickRoads', 'falmouthBay', 'truroInland']) {
+    assert(smart.hasTileForPoint(points[name].lat, points[name].lon),
+      `${name}: fine tile is loaded (precondition)`);
+  }
+  assert(!smart.hasTileForPoint(points.dartmoor.lat, points.dartmoor.lon),
+    `dartmoor: outside loaded tiles (precondition)`);
+
+  assert(!smart.containsLand(points.carrickRoads),
+    `Carrick Roads mid-channel is water with fine tiles loaded (regression: coarse chords must not leak in)`);
+  assert(!smart.containsLand(points.falmouthBay),
+    `Falmouth Bay is water with fine tiles loaded`);
+  assert(smart.containsLand(points.truroInland),
+    `inland near Truro is land — mainland containment comes from fine tile pieces`);
+  assert(smart.containsLand(points.dartmoor),
+    `Dartmoor inland is land via the coarse fallback path`);
+
+  const chanA = { lat: 50.17, lon: -5.035 };
+  const chanB = { lat: 50.185, lon: -5.04 };
+  assert(!crossesLand(smart, chanA, chanB, null, null, 0),
+    `Carrick Roads channel is routable water through crossesLand`);
+
+  let maxPiecePoints = 0;
+  for (const ring of fine.outerRings) {
+    if (ring.length > maxPiecePoints) maxPiecePoints = ring.length;
+  }
+  assert(maxPiecePoints > 0 && maxPiecePoints <= 2000,
+    `tile ring pieces stay small (largest ${maxPiecePoints} points)`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed}`);

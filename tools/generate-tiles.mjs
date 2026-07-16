@@ -1,6 +1,11 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { pointInPolygon } from '../src/core/geometry.js';
+import {
+  CLIP_MARGIN_DEG, ringBbox, boundsOverlap, expandBounds,
+  fullBoundsRing, clipRingToBounds
+} from './tile-ring-clipper.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -33,85 +38,111 @@ function tileBounds(z, x, y) {
   };
 }
 
-function pointInBounds(lat, lon, bounds) {
-  return lat >= bounds.south && lat <= bounds.north && lon >= bounds.west && lon <= bounds.east;
-}
-
-function segmentIntersectsBounds(seg, bounds) {
-  if (pointInBounds(seg.a.lat, seg.a.lon, bounds)) return true;
-  if (pointInBounds(seg.b.lat, seg.b.lon, bounds)) return true;
-  return false;
+function tileKeysForBbox(bbox, zoom) {
+  const keys = [];
+  const x1 = lonToTileX(bbox.west, zoom);
+  const x2 = lonToTileX(bbox.east, zoom);
+  const y1 = latToTileY(bbox.north, zoom);
+  const y2 = latToTileY(bbox.south, zoom);
+  for (let x = x1; x <= x2; x++) {
+    for (let y = y1; y <= y2; y++) {
+      keys.push(`${zoom}/${x}/${y}`);
+    }
+  }
+  return keys;
 }
 
 const raw = JSON.parse(readFileSync(join(ROOT, 'src/data/coastlines/sw-england.json'), 'utf-8'));
 
-// Rings this large span many tiles (a whole regional landmass outline).
-// Stuffing the full ring into every tile it touches bloats each of those
-// tile files by hundreds of KB for zero benefit: the coarse layer already
-// carries an equivalent copy for point-in-polygon fallback checks, and
-// line-crossing precision comes from segments, which are assigned per-tile
-// correctly already. Any tile loaded is already unioned with the coarse
-// layer at runtime (SmartCoastline), so omitting large rings here doesn't
-// lose containment coverage.
-const MAX_RING_POINTS_PER_TILE = 500;
-
 const tileMap = new Map();
-const tileRingMap = new Map();
-
 for (const seg of raw.segments) {
-  const tiles = new Set();
-  for (const pt of [seg.a, seg.b]) {
-    const x = lonToTileX(pt.lon, ZOOM);
-    const y = latToTileY(pt.lat, ZOOM);
-    tiles.add(`${ZOOM}/${x}/${y}`);
-  }
-  for (const key of tiles) {
+  const bbox = {
+    south: Math.min(seg.a.lat, seg.b.lat),
+    north: Math.max(seg.a.lat, seg.b.lat),
+    west: Math.min(seg.a.lon, seg.b.lon),
+    east: Math.max(seg.a.lon, seg.b.lon)
+  };
+  for (const key of tileKeysForBbox(bbox, ZOOM)) {
     if (!tileMap.has(key)) tileMap.set(key, []);
     tileMap.get(key).push(seg);
   }
 }
 
-for (const ring of (raw.outerRings || [])) {
-  if (ring.length > MAX_RING_POINTS_PER_TILE) continue;
-  const tileSet = new Set();
-  for (const pt of ring) {
-    const x = lonToTileX(pt.lon, ZOOM);
-    const y = latToTileY(pt.lat, ZOOM);
-    tileSet.add(`${ZOOM}/${x}/${y}`);
+function edgeTileSets(rings) {
+  const sets = rings.map(() => new Set());
+  for (let r = 0; r < rings.length; r++) {
+    const ring = rings[r];
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      const bbox = expandBounds({
+        south: Math.min(a.lat, b.lat),
+        north: Math.max(a.lat, b.lat),
+        west: Math.min(a.lon, b.lon),
+        east: Math.max(a.lon, b.lon)
+      }, CLIP_MARGIN_DEG);
+      for (const key of tileKeysForBbox(bbox, ZOOM)) {
+        sets[r].add(key);
+      }
+    }
   }
-  for (const key of tileSet) {
-    if (!tileRingMap.has(key)) tileRingMap.set(key, { outerRings: [], innerRings: [] });
-    tileRingMap.get(key).outerRings.push(ring);
-  }
+  return sets;
 }
 
-for (const ring of (raw.innerRings || [])) {
-  if (ring.length > MAX_RING_POINTS_PER_TILE) continue;
-  const tileSet = new Set();
-  for (const pt of ring) {
-    const x = lonToTileX(pt.lon, ZOOM);
-    const y = latToTileY(pt.lat, ZOOM);
-    tileSet.add(`${ZOOM}/${x}/${y}`);
+const outerRings = raw.outerRings || [];
+const innerRings = raw.innerRings || [];
+const outerBboxes = outerRings.map(ringBbox);
+const innerBboxes = innerRings.map(ringBbox);
+const outerEdgeTiles = edgeTileSets(outerRings);
+const innerEdgeTiles = edgeTileSets(innerRings);
+
+function ringPiecesForTile(key, bounds, rings, bboxes, edgeTiles) {
+  const expanded = expandBounds(bounds, CLIP_MARGIN_DEG);
+  const center = {
+    lat: (bounds.north + bounds.south) / 2,
+    lon: (bounds.east + bounds.west) / 2
+  };
+  const pieces = [];
+  for (let r = 0; r < rings.length; r++) {
+    if (!boundsOverlap(bboxes[r], expanded)) continue;
+    if (edgeTiles[r].has(key)) {
+      pieces.push(...clipRingToBounds(rings[r], expanded));
+    } else if (pointInPolygon(center, rings[r])) {
+      pieces.push(fullBoundsRing(expanded));
+    }
   }
-  for (const key of tileSet) {
-    if (!tileRingMap.has(key)) tileRingMap.set(key, { outerRings: [], innerRings: [] });
-    tileRingMap.get(key).innerRings.push(ring);
-  }
+  return pieces;
 }
 
 const outDir = join(ROOT, 'tiles/coastline', String(ZOOM));
-try { mkdirSync(outDir, { recursive: true }); } catch {}
+mkdirSync(outDir, { recursive: true });
 
 let tileCount = 0;
+let totalPieces = 0;
+let maxPiecePoints = 0;
+
 for (const [key, segments] of tileMap) {
   const [z, x, y] = key.split('/').map(Number);
+  const bounds = tileBounds(z, x, y);
+
+  const outerPieces = ringPiecesForTile(key, bounds, outerRings, outerBboxes, outerEdgeTiles);
+  const innerPieces = ringPiecesForTile(key, bounds, innerRings, innerBboxes, innerEdgeTiles);
+
+  for (const piece of outerPieces) {
+    totalPieces++;
+    if (piece.length > maxPiecePoints) maxPiecePoints = piece.length;
+  }
+
   const tileDir = join(outDir, String(x));
-  try { mkdirSync(tileDir, { recursive: true }); } catch {}
-  const tilePath = join(tileDir, `${y}.json`);
-  const rings = tileRingMap.get(key) || { outerRings: [], innerRings: [] };
-  writeFileSync(tilePath, JSON.stringify({ segments, outerRings: rings.outerRings, innerRings: rings.innerRings }));
+  mkdirSync(tileDir, { recursive: true });
+  writeFileSync(join(tileDir, `${y}.json`), JSON.stringify({
+    segments,
+    outerRings: outerPieces,
+    innerRings: innerPieces
+  }));
   tileCount++;
 }
 
 console.log(`Generated ${tileCount} tiles at zoom ${ZOOM}`);
+console.log(`Outer ring pieces: ${totalPieces} (largest ${maxPiecePoints} points)`);
 console.log(`Output: tiles/coastline/${ZOOM}/`);

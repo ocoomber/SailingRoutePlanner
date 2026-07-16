@@ -61,15 +61,54 @@ were removed as out of date.
   - Raw OSM vertex density is lightly simplified at ingestion (~56m
     tolerance, far below any clearance margin the router checks) purely
     to keep the spatial index fast; `src/core/coastline.js`'s
-    `CELL_SIZE` (0.06°) must stay larger than the largest clearance
-    margin ever passed to `crossesLand` (currently 2NM) or lookups
-    silently miss land beyond the 3×3 cell search window. The coarse
-    layer (`tools/simplify-coastline.mjs`) additionally drops outer
-    rings smaller than 2NM bbox-diagonal (thousands of tiny rocks/
-    islets are irrelevant at coarse-pass clearance, e.g. the Isles of
-    Scilly) and bbox-clips (via the same safe library) any single ring
-    over 500 points post-simplification, so the coarse layer never
-    balloons from one huge ring being kept whole.
+    `CELL_SIZE` (0.06°, exported) must stay larger than the largest
+    clearance margin ever passed to `crossesLand` (currently 2NM) or
+    lookups silently miss land beyond the 3×3 cell search window. The
+    coarse layer (`tools/simplify-coastline.mjs`, `EPSILON = 0.005°`
+    ≈550m tolerance) additionally drops outer rings smaller than 2NM
+    bbox-diagonal (tiny rocks/islets are irrelevant at coarse-pass
+    clearance) and bbox-clips (via the same safe library) any single
+    ring over 500 points post-simplification. It logs its longest
+    non-boundary edge — chords over ~10NM mean the tolerance is chording
+    across real geometry.
+  - **Rings are CLIPPED per tile, never included whole**
+    (`tools/generate-tiles.mjs` + `tools/tile-ring-clipper.mjs`):
+    each tile stores the Martinez-intersection of every ring with its
+    bounds expanded by `CLIP_MARGIN_DEG` (0.01°) — the overlap makes
+    containment seams at tile boundaries impossible (overlap is safe
+    for "in any polygon"; gaps are not). Tiles fully inside a ring with
+    no ring edge nearby get a full-rect piece. This means the mainland
+    ring IS present (as small pieces) in every tile it covers — fine
+    tiles answer mainland containment themselves. Only tiles containing
+    segments are written; unwritten tiles fall back to coarse
+    containment, which is correct (deep-inland = land, open-sea =
+    water, both within coarse tolerance).
+  - **Containment is layered, never merged** (`SmartCoastline.containsLand`):
+    point in a loaded tile → fine rings only; otherwise → coarse rings
+    only. Coarse outerRings are NEVER concatenated into the fine set —
+    doing so once let coarse chords across the Fal estuary mark real
+    water as land in the fine routing pass (the "land overlay doesn't
+    match the map" bug). `crossesLand` calls `containsLand` when the
+    coastline object provides it. Segments/grid stay merged (fine cells
+    override coarse per cell) — crossing detection is safe to layer that
+    way, containment is not.
+  - `TileCache` bumps `DB_VERSION` and clears the store on upgrade
+    whenever tile content/shape changes — IndexedDB caches tiles
+    forever, so regenerated tiles are invisible without a version bump.
+  - **The clearance margin is exempt within 1NM of the start/end points**
+    (`ENDPOINT_CLEARANCE_EXEMPT_NM` in `src/core/coastline.js`): with
+    accurate OSM data, harbour mouths (e.g. St Mawes, ~1NM wide) are
+    narrower than 2× the default 0.5NM comfort margin, so without the
+    exemption no route can ever leave or enter harbour. Real land
+    crossings near endpoints are still blocked by the segment checks —
+    only the open-water comfort buffer is waived. Mid-route narrow
+    channels remain subject to the full margin (known limitation,
+    future refinement).
+  - The land-overlay debug view renders exactly what containment uses:
+    red fill = fine tile pieces, orange dashed = coarse fallback. An
+    all-orange overlay just means no tiles are loaded yet (no route
+    calculated) — approximate by design, not a bug. Straight edges on
+    lon −2.0/lat 51.5 are the data bbox boundary, also not a bug.
   To regenerate from a fresh archive: see
   `server/README.md`.
 - Windows PC dev environment — never assume Mac tooling

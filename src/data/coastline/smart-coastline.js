@@ -1,4 +1,5 @@
 import { pointToTile, tileKey, DEFAULT_TILE_ZOOM } from './tile-selector.js';
+import { inAnyPolygon } from '../../core/coastline.js';
 
 export class SmartCoastline {
   constructor(fineCoastline, coarseCoastline, loadedTileKeys) {
@@ -7,8 +8,8 @@ export class SmartCoastline {
     this.loadedTileKeys = loadedTileKeys;
 
     this.segments = fineCoastline.segments.concat(coarseCoastline.segments);
-    this.outerRings = fineCoastline.outerRings.concat(coarseCoastline.outerRings);
-    this.innerRings = fineCoastline.innerRings.concat(coarseCoastline.innerRings);
+    this.outerRings = fineCoastline.outerRings;
+    this.innerRings = fineCoastline.innerRings;
 
     const merged = {};
     for (const key of Object.keys(coarseCoastline.grid)) {
@@ -18,6 +19,13 @@ export class SmartCoastline {
       merged[key] = fineCoastline.grid[key];
     }
     this.grid = merged;
+  }
+
+  containsLand(point) {
+    if (this.hasTileForPoint(point.lat, point.lon)) {
+      return inAnyPolygon(point, this.fine.outerRings, this.fine.outerRingBboxes);
+    }
+    return inAnyPolygon(point, this.coarse.outerRings, this.coarse.outerRingBboxes);
   }
 
   hasTileForPoint(lat, lon) {
