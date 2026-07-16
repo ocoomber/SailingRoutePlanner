@@ -13,6 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate coastline tiles
+        run: node tools/generate-tiles.mjs
+
       - name: Inject build number
         run: |
           BUILD_NUM="${{ github.run_number }}"
