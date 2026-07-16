@@ -1,0 +1,48 @@
+[
+  {
+    "name": "Dead upwind",
+    "description": "Wind blowing directly from destination toward start — forces tacking decision",
+    "windFixture": "wind-dead-upwind.json",
+    "start": { "lat": 50.00, "lon": -3.50 },
+    "end": { "lat": 50.00, "lon": -2.50 },
+    "expectRoute": true,
+    "expectTack": true
+  },
+  {
+    "name": "Dead downwind",
+    "description": "Wind blowing directly from behind the desired course — forces gybing decision",
+    "windFixture": "wind-dead-downwind.json",
+    "start": { "lat": 50.00, "lon": -3.50 },
+    "end": { "lat": 50.00, "lon": -2.50 },
+    "expectRoute": true,
+    "expectTack": true
+  },
+  {
+    "name": "Beam reach",
+    "description": "Wind perpendicular to course — should sail direct, no tacking",
+    "windFixture": "wind-beam-reach.json",
+    "start": { "lat": 50.00, "lon": -3.50 },
+    "end": { "lat": 50.00, "lon": -2.50 },
+    "expectRoute": true,
+    "expectTack": false
+  },
+  {
+    "name": "Wind shift mid-route",
+    "description": "Wind direction changes partway — engine should re-evaluate and switch tack",
+    "windFixture": "wind-shift.json",
+    "start": { "lat": 50.00, "lon": -3.50 },
+    "end": { "lat": 50.00, "lon": -2.50 },
+    "expectRoute": true,
+    "expectTack": true
+  },
+  {
+    "name": "Current pushing across",
+    "description": "Tidal current angled across direct course — engine should crab into current",
+    "windFixture": "wind-beam-reach.json",
+    "tide": { "direction": 180, "speed": 2 },
+    "start": { "lat": 50.00, "lon": -3.50 },
+    "end": { "lat": 50.00, "lon": -2.50 },
+    "expectRoute": true,
+    "expectTack": false
+  }
+]
