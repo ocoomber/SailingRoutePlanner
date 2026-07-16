@@ -206,21 +206,44 @@ function clearWindArrows() {
   windArrows = [];
 }
 
+const FINE_LAND_STYLE = {
+  color: '#dc2626',
+  fillColor: '#dc2626',
+  fillOpacity: 0.35,
+  weight: 1,
+  opacity: 0.5
+};
+
+const FALLBACK_LAND_STYLE = {
+  color: '#ea580c',
+  fillColor: '#ea580c',
+  fillOpacity: 0.12,
+  weight: 1.5,
+  opacity: 0.7,
+  dashArray: '6 4'
+};
+
+function addLandRings(rings, style, group, tooltip) {
+  for (const ring of rings) {
+    const latlngs = ring.map(p => [p.lat, p.lon]);
+    const poly = L.polygon(latlngs, style).addTo(group);
+    if (tooltip) poly.bindTooltip(tooltip, { sticky: true });
+  }
+}
+
 export function drawLandOverlay(coastline) {
   clearLandOverlay();
   if (!coastline || !coastline.outerRings) return;
 
   landOverlay = L.layerGroup().addTo(map);
 
-  for (const ring of coastline.outerRings) {
-    const latlngs = ring.map(p => [p.lat, p.lon]);
-    L.polygon(latlngs, {
-      color: '#dc2626',
-      fillColor: '#dc2626',
-      fillOpacity: 0.35,
-      weight: 1,
-      opacity: 0.5
-    }).addTo(landOverlay);
+  if (coastline.containsLand) {
+    addLandRings(coastline.fine.outerRings, FINE_LAND_STYLE, landOverlay);
+    addLandRings(coastline.coarse.outerRings, FALLBACK_LAND_STYLE, landOverlay,
+      'Coarse fallback — used where no detail tile is loaded');
+  } else {
+    addLandRings(coastline.outerRings, FALLBACK_LAND_STYLE, landOverlay,
+      'Coarse layer (approximate) — no detail tiles loaded yet');
   }
 
   for (const ring of coastline.innerRings) {

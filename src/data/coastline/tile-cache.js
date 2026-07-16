@@ -1,6 +1,6 @@
 const DB_NAME = 'coastline-tiles';
 const STORE_NAME = 'tiles';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export class TileCache {
   constructor() {
@@ -16,6 +16,8 @@ export class TileCache {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME);
+        } else {
+          e.target.transaction.objectStore(STORE_NAME).clear();
         }
       };
       req.onsuccess = (e) => {

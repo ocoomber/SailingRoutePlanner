@@ -103,7 +103,7 @@ function clipToBboxForCoarseLayer(ring) {
 
 const raw = JSON.parse(readFileSync(join(ROOT, 'src/data/coastlines/sw-england.json'), 'utf-8'));
 
-const EPSILON = 0.02;
+const EPSILON = 0.005;
 const MIN_RING_DIAGONAL_NM = 2;
 const CLIP_RING_ABOVE_POINTS = 500;
 
@@ -147,4 +147,20 @@ console.log(`Original: ${origSegs} segments, ${raw.outerRings.length} outer ring
 console.log(`Dropped ${raw.outerRings.length - outerRingsForCoarse.length} outer rings under ${MIN_RING_DIAGONAL_NM}NM diagonal (irrelevant at coarse-pass clearance)`);
 console.log(`Coarse:   ${coarseSegments.length} segments, ${simplifiedOuterRings.length} outer rings`);
 console.log(`Reduction: ${((1 - coarseSegments.length / origSegs) * 100).toFixed(1)}%`);
+
+function onBboxBoundary(p) {
+  return p.lat === BBOX.south || p.lat === BBOX.north || p.lon === BBOX.west || p.lon === BBOX.east;
+}
+
+let maxEdgeNm = 0;
+let longEdges = 0;
+for (const seg of coarseSegments) {
+  if (onBboxBoundary(seg.a) && onBboxBoundary(seg.b)) continue;
+  const dLatNm = (seg.b.lat - seg.a.lat) * 60;
+  const dLonNm = (seg.b.lon - seg.a.lon) * 60 * Math.cos((seg.a.lat + seg.b.lat) / 2 * Math.PI / 180);
+  const edgeNm = Math.sqrt(dLatNm * dLatNm + dLonNm * dLonNm);
+  if (edgeNm > maxEdgeNm) maxEdgeNm = edgeNm;
+  if (edgeNm > 10) longEdges++;
+}
+console.log(`Longest non-boundary edge: ${maxEdgeNm.toFixed(1)}NM${longEdges > 0 ? ` — WARNING: ${longEdges} edges over 10NM chord across real geometry` : ''}`);
 console.log(`Written to src/data/coastline/sw-england-coarse.json`);

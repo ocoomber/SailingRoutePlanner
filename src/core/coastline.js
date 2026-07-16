@@ -1,6 +1,19 @@
 import { segmentsCross, pointInPolygon, distanceNm, pointToSegmentDistNm, interpolatePoint } from './geometry.js';
 
-const CELL_SIZE = 0.06;
+export const CELL_SIZE = 0.06;
+
+export function buildRingBboxes(rings) {
+  return (rings || []).map(ring => {
+    let south = Infinity, north = -Infinity, west = Infinity, east = -Infinity;
+    for (const pt of ring) {
+      if (pt.lat < south) south = pt.lat;
+      if (pt.lat > north) north = pt.lat;
+      if (pt.lon < west) west = pt.lon;
+      if (pt.lon > east) east = pt.lon;
+    }
+    return { south, north, west, east };
+  });
+}
 
 export function loadCoastline(data) {
   const grid = {};
@@ -27,6 +40,7 @@ export function loadCoastline(data) {
     }
   }
   data.grid = grid;
+  data.outerRingBboxes = buildRingBboxes(data.outerRings);
   return data;
 }
 
@@ -87,16 +101,27 @@ function segsCross(grid, a, b) {
   return false;
 }
 
-function inAnyPolygon(point, rings) {
+export function inAnyPolygon(point, rings, bboxes) {
   if (!rings) return false;
-  for (const ring of rings) {
-    if (pointInPolygon(point, ring)) return true;
+  for (let i = 0; i < rings.length; i++) {
+    if (bboxes) {
+      const b = bboxes[i];
+      if (point.lat < b.south || point.lat > b.north ||
+          point.lon < b.west || point.lon > b.east) continue;
+    }
+    if (pointInPolygon(point, rings[i])) return true;
   }
   return false;
 }
 
+function landContains(coastline, point) {
+  if (coastline.containsLand) return coastline.containsLand(point);
+  return inAnyPolygon(point, coastline.outerRings, coastline.outerRingBboxes);
+}
+
 const SAFE_DIST_NM = 1;
 const BROAD_DIST_NM = 1;
+const ENDPOINT_CLEARANCE_EXEMPT_NM = 1;
 
 export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm = 0) {
   const dA = nearestNm(a, coastline.grid);
@@ -104,23 +129,23 @@ export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm =
 
   if (segsCross(coastline.grid, a, b)) {
     if (startPt && nearestNm(startPt, coastline.grid) < SAFE_DIST_NM && distanceNm(startPt, a) < 1) {
-      if (inAnyPolygon(b, coastline.outerRings)) return true;
+      if (landContains(coastline, b)) return true;
     } else if (endPt && nearestNm(endPt, coastline.grid) < SAFE_DIST_NM && distanceNm(endPt, b) < 1) {
-      if (inAnyPolygon(b, coastline.outerRings) && dB > SAFE_DIST_NM) return true;
+      if (landContains(coastline, b) && dB > SAFE_DIST_NM) return true;
     } else {
       return true;
     }
   }
 
-  if (dA > BROAD_DIST_NM && inAnyPolygon(a, coastline.outerRings)) return true;
-  if (dB > BROAD_DIST_NM && inAnyPolygon(b, coastline.outerRings)) return true;
+  if (dA > BROAD_DIST_NM && landContains(coastline, a)) return true;
+  if (dB > BROAD_DIST_NM && landContains(coastline, b)) return true;
 
   const legDist = distanceNm(a, b);
   if (legDist > 2) {
     const steps = Math.ceil(legDist / 2);
     for (let i = 1; i < steps; i++) {
       const mid = interpolatePoint(a, b, i / steps);
-      if (nearestNm(mid, coastline.grid) > BROAD_DIST_NM && inAnyPolygon(mid, coastline.outerRings)) return true;
+      if (nearestNm(mid, coastline.grid) > BROAD_DIST_NM && landContains(coastline, mid)) return true;
     }
   }
 
@@ -131,8 +156,8 @@ export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm =
     for (let i = 0; i <= nSteps; i++) {
       const pt = i === 0 ? a : i === nSteps ? b : interpolatePoint(a, b, i / nSteps);
 
-      if (startPt && distanceNm(pt, startPt) < 0.1) continue;
-      if (endPt && distanceNm(pt, endPt) < 0.1) continue;
+      if (startPt && distanceNm(pt, startPt) < ENDPOINT_CLEARANCE_EXEMPT_NM) continue;
+      if (endPt && distanceNm(pt, endPt) < ENDPOINT_CLEARANCE_EXEMPT_NM) continue;
 
       if (nearestNm(pt, coastline.grid) < clearanceMarginNm) return true;
     }

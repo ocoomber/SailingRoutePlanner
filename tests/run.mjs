@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import { loadCoastline, crossesLand } from '../src/core/coastline.js';
+import { loadCoastline, crossesLand, CELL_SIZE } from '../src/core/coastline.js';
 import { calculateRoute } from '../src/core/router.js';
 import { distanceNm, pointToSegmentDistNm } from '../src/core/geometry.js';
 
@@ -8,7 +8,6 @@ const testRoutes = JSON.parse(readFileSync('src/data/test-routes.json', 'utf-8')
 
 function nearestNmOutside(point, grid) {
   let min = Infinity;
-  const CELL_SIZE = 0.1;
   const cx = Math.floor(point.lon / CELL_SIZE) * CELL_SIZE;
   const cy = Math.floor(point.lat / CELL_SIZE) * CELL_SIZE;
   for (let dx = -1; dx <= 1; dx++) {

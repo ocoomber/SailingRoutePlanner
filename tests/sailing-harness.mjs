@@ -8,6 +8,7 @@ import { analyzeRoute } from '../src/core/decision-logger.js';
 import { narrateRoute } from '../src/core/explain.js';
 import { interpolateWind } from '../src/core/wind-interpolation.js';
 import { distanceNm } from '../src/core/geometry.js';
+import { DEFAULT_COMFORT_PARAMS } from '../src/core/comfort-params.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_DIR = join(__dirname, '..', 'src', 'data', 'test-fixtures');
@@ -45,6 +46,7 @@ async function runScenario(sc) {
     polars,
     windGrid,
     tidalCurrent: tide,
+    tackPenaltyKn: DEFAULT_COMFORT_PARAMS.tackPenaltyKn,
     headingsPerStep: 18,
     maxSteps: 100
   });
@@ -88,6 +90,20 @@ async function runScenario(sc) {
       console.log(`FAIL [${elapsed}ms]: ${sc.name}`);
       console.log(`  Expected no tack, but route has maneuvers`);
       console.log(`  ${sc.description}`);
+      return { pass: false };
+    }
+  }
+
+  if (typeof sc.maxManeuvers === 'number') {
+    const maneuvers = result.route.filter(leg => leg.maneuver !== null).length;
+    if (maneuvers > sc.maxManeuvers) {
+      console.log(`FAIL [${elapsed}ms]: ${sc.name}`);
+      console.log(`  ${maneuvers} maneuvers, expected <= ${sc.maxManeuvers} (dithering under veering wind)`);
+      console.log(`  ${sc.description}`);
+      console.log(`  Legs: ${result.route.length}`);
+      for (const leg of result.route) {
+        console.log(`    ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.windDescription}${leg.maneuver ? ` -> ${leg.maneuver}` : ''}`);
+      }
       return { pass: false };
     }
   }
