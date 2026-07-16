@@ -19,9 +19,14 @@ were removed as out of date.
 - Vanilla HTML/CSS/JS, ES modules with explicit `.js` extensions, no
   build step, no framework (deliberate, final decision)
 - Leaflet.js via CDN for map
-- Browser app today; a thin Node/Express server (`server/`) is planned
-  per build-plan WS3 — core modules already run unchanged in Node (the
-  test suites prove this)
+- Browser app plus a thin Node/Express server (`server/`, WS3) exposing
+  `planPassage()` as `POST /plan-route` — core modules run unchanged in
+  Node (the test suites prove this). `server/coastline-node.js` mirrors
+  `CoastlineManager`'s interface but reads tiles from disk (`fs`)
+  instead of fetch+IndexedDB; both share the pure
+  `src/data/coastline/smart-coastline.js` merge logic. `server/` has
+  its own `package.json`/`node_modules` (Express only) — no root
+  package.json.
 - Open-Meteo Forecast API for wind (free, no key)
 - Coastline: two-pass tiled system (coarse bundled layer + z/x/y detail
   tiles generated at deploy time, cached in IndexedDB). Source data swap
@@ -113,13 +118,16 @@ debug checks.
   `planPassage()` end-to-end (6 scenarios: light air, long beam reach,
   short wind window, final-approach override, solo-vs-crewed hassle,
   reef trigger)
+- `tests/api.mjs` — Boots `server/index.js` on an ephemeral port with a
+  stubbed wind fetch, exercises `/health` and `/plan-route` (valid
+  request, validation errors, debug flag)
 - `tests/all.mjs` — Runs everything; must pass before any task is done
 Tests always call real production functions, never reimplementations.
 
 ## Current State
 Phase 1 prototyping. All test suites green as of 2026-07-16. Executing
 `build-plan.md`: WS1 engine fixes (done) → WS2 comfort rewrite (done)
-→ WS3 API → WS5 OSM coastline swap → WS4 tidal → WS6 UI/docs.
+→ WS3 API (done) → WS5 OSM coastline swap → WS4 tidal → WS6 UI/docs.
 Testing against the live GitHub Pages build. Commit directly to main
 after each meaningful change — no branches, no PRs.
 
