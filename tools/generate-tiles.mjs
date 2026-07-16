@@ -45,6 +45,16 @@ function segmentIntersectsBounds(seg, bounds) {
 
 const raw = JSON.parse(readFileSync(join(ROOT, 'src/data/coastlines/sw-england.json'), 'utf-8'));
 
+// Rings this large span many tiles (a whole regional landmass outline).
+// Stuffing the full ring into every tile it touches bloats each of those
+// tile files by hundreds of KB for zero benefit: the coarse layer already
+// carries an equivalent copy for point-in-polygon fallback checks, and
+// line-crossing precision comes from segments, which are assigned per-tile
+// correctly already. Any tile loaded is already unioned with the coarse
+// layer at runtime (SmartCoastline), so omitting large rings here doesn't
+// lose containment coverage.
+const MAX_RING_POINTS_PER_TILE = 500;
+
 const tileMap = new Map();
 const tileRingMap = new Map();
 
@@ -62,6 +72,7 @@ for (const seg of raw.segments) {
 }
 
 for (const ring of (raw.outerRings || [])) {
+  if (ring.length > MAX_RING_POINTS_PER_TILE) continue;
   const tileSet = new Set();
   for (const pt of ring) {
     const x = lonToTileX(pt.lon, ZOOM);
@@ -75,6 +86,7 @@ for (const ring of (raw.outerRings || [])) {
 }
 
 for (const ring of (raw.innerRings || [])) {
+  if (ring.length > MAX_RING_POINTS_PER_TILE) continue;
   const tileSet = new Set();
   for (const pt of ring) {
     const x = lonToTileX(pt.lon, ZOOM);

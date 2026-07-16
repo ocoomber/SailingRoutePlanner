@@ -3,6 +3,7 @@ import { join } from 'path';
 import { loadCoastline } from '../src/core/coastline.js';
 import { selectTilesForCorridor, DEFAULT_TILE_ZOOM } from '../src/data/coastline/tile-selector.js';
 import { SmartCoastline } from '../src/data/coastline/smart-coastline.js';
+import { dedupeRings } from '../src/data/coastline/dedupe-rings.js';
 
 const TILES_DIR = join(process.cwd(), 'tiles', 'coastline');
 
@@ -56,7 +57,11 @@ export class CoastlineNode {
       allInnerRings.push(...(data.innerRings || []));
     }
 
-    const fineCoastline = loadCoastline({ segments: allSegments, outerRings: allOuterRings, innerRings: allInnerRings });
+    const fineCoastline = loadCoastline({
+      segments: allSegments,
+      outerRings: dedupeRings(allOuterRings),
+      innerRings: dedupeRings(allInnerRings)
+    });
     this._smartCoastline = new SmartCoastline(fineCoastline, this.coarseCoastline, new Set(this._loadedTileKeys));
   }
 }

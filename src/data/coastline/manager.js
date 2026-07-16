@@ -2,6 +2,7 @@ import { loadCoastline } from '../../core/coastline.js';
 import { TileCache } from './tile-cache.js';
 import { pointToTile, tileKey, selectTilesForCorridor, DEFAULT_TILE_ZOOM } from './tile-selector.js';
 import { SmartCoastline } from './smart-coastline.js';
+import { dedupeRings } from './dedupe-rings.js';
 
 const TILE_SERVER_BASE = 'tiles/coastline';
 
@@ -90,7 +91,11 @@ export class CoastlineManager {
       allInnerRings.push(...(data.innerRings || []));
     }
 
-    const mergedData = { segments: allSegments, outerRings: allOuterRings, innerRings: allInnerRings };
+    const mergedData = {
+      segments: allSegments,
+      outerRings: dedupeRings(allOuterRings),
+      innerRings: dedupeRings(allInnerRings)
+    };
     this._fineData = loadCoastline(mergedData);
     this._smartCoastline = new SmartCoastline(this._fineData, this.coarseCoastline, new Set(this._loadedTileKeys));
   }
