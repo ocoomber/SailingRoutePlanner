@@ -30,18 +30,47 @@ were removed as out of date.
 - Open-Meteo Forecast API for wind (free, no key)
 - Coastline: two-pass tiled system (coarse bundled layer + z/x/y detail
   tiles generated at deploy time, cached in IndexedDB). Source data
-  (`src/data/coastlines/sw-england.json`) is built from OSM land
-  polygons (`osmdata.openstreetmap.de`, ODbL) via
-  `tools/build-coastline-source.mjs` — done (WS5). Raw OSM vertex
-  density is lightly simplified at ingestion (~56m tolerance, far below
-  any clearance margin the router checks) purely to keep the spatial
-  index fast; `src/core/coastline.js`'s `CELL_SIZE` (0.06°) must stay
-  larger than the largest clearance margin ever passed to `crossesLand`
-  (currently 2NM) or lookups silently miss land beyond the 3×3 cell
-  search window. The coarse layer additionally drops outer rings
-  smaller than 2NM bbox-diagonal (irrelevant at coarse-pass clearance —
-  thousands of tiny rocks/islets exist in real OSM data, e.g. the Isles
-  of Scilly). To regenerate from a fresh archive: see
+  (`src/data/coastlines/sw-england.json`) is built from the OSM
+  **complete** (not "split") land-polygons dataset
+  (`osmdata.openstreetmap.de`, ODbL) via
+  `tools/build-coastline-source.mjs` — done (WS5). Hard-won lessons
+  from building this, don't repeat them:
+  - **Never hand-roll bbox polygon clipping, and never trust a bbox
+    clipper that's secretly Sutherland-Hodgman** (this includes
+    `@turf/bbox-clip` — verified it has the same flaw). Clipping a
+    concave ring that the box splits into disjoint pieces produces one
+    self-intersecting ring with bogus "bridge" edges along the clip
+    boundary — this shipped once and showed up as giant misaligned
+    triangles in the land-overlay debug view. Use a real polygon-
+    boolean library (`polygon-clipping`, Martinez-Rueda) which returns
+    each disjoint piece as its own ring.
+  - **The OSM "split" land-polygons variant has this exact bug baked
+    into its own internal 1° tiling** — confirmed by inspection (fake
+    edges landing on round-degree coordinates). Use "complete" instead.
+  - **Eurasia is one topologically connected landmass** — its coastline
+    is a single polygon ring with hundreds of thousands of points even
+    after simplification, and general polygon-clipping libraries choke
+    on it (numerical robustness limits). `build-coastline-source.mjs`
+    catches this, falls back to keeping the ring whole (never clips it,
+    so no artifact), and excludes anything over
+    `MAX_CONTAINMENT_RING_POINTS` (5000) from point-in-polygon
+    containment checks entirely — `pointInPolygon` is O(ring length)
+    and a 582k-point ring in that hot path was a 10-40x routing
+    slowdown. Its segments are still kept (filtered to near the bbox)
+    for line-crossing detection, which doesn't have this problem.
+  - Raw OSM vertex density is lightly simplified at ingestion (~56m
+    tolerance, far below any clearance margin the router checks) purely
+    to keep the spatial index fast; `src/core/coastline.js`'s
+    `CELL_SIZE` (0.06°) must stay larger than the largest clearance
+    margin ever passed to `crossesLand` (currently 2NM) or lookups
+    silently miss land beyond the 3×3 cell search window. The coarse
+    layer (`tools/simplify-coastline.mjs`) additionally drops outer
+    rings smaller than 2NM bbox-diagonal (thousands of tiny rocks/
+    islets are irrelevant at coarse-pass clearance, e.g. the Isles of
+    Scilly) and bbox-clips (via the same safe library) any single ring
+    over 500 points post-simplification, so the coarse layer never
+    balloons from one huge ring being kept whole.
+  To regenerate from a fresh archive: see
   `server/README.md`.
 - Windows PC dev environment — never assume Mac tooling
 
@@ -143,6 +172,14 @@ Phase 1 prototyping. All test suites green as of 2026-07-16. Executing
 → WS3 API (done) → WS5 OSM coastline swap (done) → WS4 tidal → WS6
 UI/docs. Testing against the live GitHub Pages build. Commit directly
 to main after each meaningful change — no branches, no PRs.
+
+**Known open issue (not yet fixed):** with a small `timeStepMinutes`
+(e.g. 15) the isochrone router can dither indefinitely near the arrival
+threshold instead of converging — seen live in the browser for a real
+route (St Mawes → Newlyn), hundreds of steps oscillating at ~0.5-0.7NM
+from destination without ever crossing the threshold, eventually
+exhausting `maxSteps`. Reproducible; not yet root-caused. Separate from
+(and discovered while investigating) the coastline data bugs above.
 
 ## Conventions
 - ES module imports with explicit .js extensions
