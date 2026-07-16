@@ -1,4 +1,4 @@
-import { segmentsCross, pointInPolygon, distanceNm, interpolatePoint } from './geometry.js';
+import { segmentsCross, pointInPolygon, distanceNm, pointToSegmentDistNm, interpolatePoint } from './geometry.js';
 
 const CELL_SIZE = 0.1;
 
@@ -7,11 +7,24 @@ export function loadCoastline(data) {
   for (const seg of data.segments) {
     const a = seg.a;
     const b = seg.b;
-    const cx = Math.floor((a.lon + b.lon) / 2 / CELL_SIZE) * CELL_SIZE;
-    const cy = Math.floor((a.lat + b.lat) / 2 / CELL_SIZE) * CELL_SIZE;
-    const key = cx.toFixed(3) + ',' + cy.toFixed(3);
-    if (!grid[key]) grid[key] = [];
-    grid[key].push([a, b]);
+
+    const minLon = Math.min(a.lon, b.lon);
+    const maxLon = Math.max(a.lon, b.lon);
+    const minLat = Math.min(a.lat, b.lat);
+    const maxLat = Math.max(a.lat, b.lat);
+
+    const cx1 = Math.floor(minLon / CELL_SIZE);
+    const cx2 = Math.floor(maxLon / CELL_SIZE);
+    const cy1 = Math.floor(minLat / CELL_SIZE);
+    const cy2 = Math.floor(maxLat / CELL_SIZE);
+
+    for (let cx = cx1; cx <= cx2; cx++) {
+      for (let cy = cy1; cy <= cy2; cy++) {
+        const key = (cx * CELL_SIZE).toFixed(3) + ',' + (cy * CELL_SIZE).toFixed(3);
+        if (!grid[key]) grid[key] = [];
+        grid[key].push([a, b]);
+      }
+    }
   }
   data.grid = grid;
   return data;
@@ -35,7 +48,7 @@ function nearestNm(point, grid) {
     const segs = grid[key];
     if (!segs) continue;
     for (const seg of segs) {
-      const d = distanceNm(point, seg[0]);
+      const d = pointToSegmentDistNm(point, seg[0], seg[1]);
       if (d < min) min = d;
     }
   }
@@ -93,6 +106,7 @@ export function crossesLand(coastline, a, b, startPt, endPt) {
     if (startPt && nearestNm(startPt, coastline.grid) < SAFE_DIST_NM && distanceNm(startPt, a) < 1) {
       if (inAnyPolygon(b, coastline.outerRings)) return true;
     } else if (endPt && nearestNm(endPt, coastline.grid) < SAFE_DIST_NM && distanceNm(endPt, b) < 1) {
+      if (inAnyPolygon(b, coastline.outerRings) && dB > SAFE_DIST_NM) return true;
     } else {
       return true;
     }
