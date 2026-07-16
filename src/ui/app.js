@@ -2,7 +2,7 @@ import { loadPolars } from '../core/polar.js';
 import { CoastlineManager } from '../data/coastline/index.js';
 import { calculateRoute } from '../core/router.js';
 import { fetchWindGrid } from '../services/wind.js';
-import { initMap, setStart, setEnd, drawRoute, clearAll, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug, drawCoarseOverlay, clearCoarseOverlay, drawTileGrid, clearTileGrid, drawTileStates, clearTileStates, drawCorridorOverlay, clearCorridorOverlay, drawRoughRoute, clearRoughRoute } from './map.js';
+import { initMap, setStart, setEnd, drawRoute, clearAll, clearChartingTools, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug, drawCoarseOverlay, clearCoarseOverlay, drawTileGrid, clearTileGrid, drawTileStates, clearTileStates, drawCorridorOverlay, clearCorridorOverlay, drawRoughRoute, clearRoughRoute } from './map.js';
 import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
 import { showResults, showError, hideResults, showLoading, hideLoading, showLog, hideLog } from './results.js';
 
@@ -258,6 +258,7 @@ function refreshDebugOverlays() {
 
 function onClear() {
   clearAll();
+  clearChartingTools();
   hideResults();
   hideLog();
   window.__lastRoute = null;
