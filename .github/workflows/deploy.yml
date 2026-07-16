@@ -18,6 +18,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install tools dependencies
+        run: npm install
+        working-directory: tools
+
       - name: Generate coastline tiles
         run: node tools/generate-tiles.mjs
 
