@@ -103,7 +103,8 @@ async function onCalculate() {
       coastline,
       timeStepMinutes: inputs.timeStep,
       headingThreshold: inputs.headingThreshold,
-      tidalCurrent
+      tidalCurrent,
+      clearanceMarginNm: inputs.clearanceMargin
     };
 
     if (inputs.geometryMode) {

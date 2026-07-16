@@ -13,7 +13,8 @@ export function getInputs() {
     headingThreshold: parseInt(document.getElementById('heading-threshold').value, 10),
     tidalEnabled: document.getElementById('enable-tides').checked,
     tidalData: document.getElementById('tide-data').value,
-    geometryMode: document.getElementById('geometry-mode').checked
+    geometryMode: document.getElementById('geometry-mode').checked,
+    clearanceMargin: parseFloat(document.getElementById('clearance-margin').value) || 0
   };
 }
 
