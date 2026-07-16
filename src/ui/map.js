@@ -18,6 +18,8 @@ export function initMap(callback) {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
+  L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
+
   map.on('click', (e) => {
     if (placing === 'start') {
       setStart(e.latlng.lat, e.latlng.lng);
