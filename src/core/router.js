@@ -3,13 +3,14 @@ import { lookupSpeed } from './polar.js';
 import { crossesLand } from './coastline.js';
 import { interpolateWind } from './wind-interpolation.js';
 
-const HEADINGS_PER_STEP = 36;
-const HEADING_STEP = 360 / HEADINGS_PER_STEP;
+const DEFAULT_HEADINGS = 36;
 
 export function calculateRoute(params) {
   const {
-    start, end, departureTime, polars, coastline, windGrid,
-    timeStepMinutes, headingThreshold, tidalCurrent
+    start, end, departureTime, coastline,
+    timeStepMinutes, headingThreshold, tidalCurrent,
+    polars, windGrid,
+    constantSpeedKn
   } = params;
 
   const timeStepHours = timeStepMinutes / 60;
@@ -24,26 +25,44 @@ export function calculateRoute(params) {
   log.push(`Time step: ${timeStepMinutes} min`);
   log.push(`Heading threshold: ${headingThreshold}°`);
   log.push(`Coastline segments: ${coastline.segments.length}`);
-  log.push(`Wind grid points: ${windGrid.points.length}`);
-  log.push(`Wind grid times: ${windGrid.grid.length} hours`);
+  if (constantSpeedKn) {
+    log.push(`Speed: ${constantSpeedKn} kn (constant, geometry-only mode)`);
+  } else {
+    log.push(`Wind grid points: ${windGrid.points.length}`);
+    log.push(`Wind grid times: ${windGrid.grid.length} hours`);
+  }
   log.push(`---`);
 
   let isochrone = [{ point: start, heading: null, parent: null, time: departureTime, sog: 0, twa: 0, windSpeed: 0, windDir: 0, distToEnd: totalDist }];
   const history = [isochrone];
 
-  const maxSteps = 500;
+  const maxSteps = params.maxSteps || 500;
   let landBlocked = 0;
   let zeroSpeed = 0;
 
   for (let step = 0; step < maxSteps; step++) {
     const nextIsochrone = [];
 
+    const nHeadings = params.headingsPerStep || DEFAULT_HEADINGS;
+    const headingStep = 360 / nHeadings;
+
     for (const node of isochrone) {
-      for (let h = 0; h < 360; h += HEADING_STEP) {
-        const wind = interpolateWind(windGrid, node.point.lat, node.point.lon, node.time);
-        const raw = h - wind.direction;
-        const twa = ((raw % 360) + 540) % 360 - 180;
-        const boatSpeed = lookupSpeed(polars, Math.abs(twa), wind.speed);
+      for (let h = 0; h < 360; h += headingStep) {
+        let boatSpeed;
+        let twaVal = 0;
+        let windSpd = 0;
+        let windDirVal = 0;
+
+        if (constantSpeedKn) {
+          boatSpeed = constantSpeedKn;
+        } else {
+          const wind = interpolateWind(windGrid, node.point.lat, node.point.lon, node.time);
+          windDirVal = wind.direction;
+          windSpd = wind.speed;
+          const raw = h - wind.direction;
+          twaVal = ((raw % 360) + 540) % 360 - 180;
+          boatSpeed = lookupSpeed(polars, Math.abs(twaVal), wind.speed);
+        }
 
         if (boatSpeed <= 0) {
           zeroSpeed++;
@@ -77,9 +96,9 @@ export function calculateRoute(params) {
           time: addHours(node.time, timeStepHours),
           distToEnd,
           sog: moveVector.speed,
-          twa,
-          windSpeed: wind.speed,
-          windDir: wind.direction
+          twa: twaVal,
+          windSpeed: windSpd,
+          windDir: windDirVal
         });
       }
     }
@@ -106,6 +125,7 @@ export function calculateRoute(params) {
       log.push(`[Step ${step}] ROUTE FOUND — within ${arrivalThreshold.toFixed(1)}NM of destination`);
       log.push(`---`);
       log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
+      const rawNodes = collectRawNodes(closest);
       const route = buildRoute(closest, history, headingThreshold);
       log.push(`Legs: ${route.length}`);
       for (let i = 0; i < route.length; i++) {
@@ -113,7 +133,7 @@ export function calculateRoute(params) {
         const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
         log.push(`  Leg ${i + 1}: ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.distance.toFixed(1)}NM ${leg.duration.toFixed(1)}h wind ${leg.windSpeed}kn from ${leg.windDir}° ${leg.windDescription}`);
       }
-      return { route, log: log.join('\n') };
+      return { route, rawNodes, log: log.join('\n') };
     }
   }
 
@@ -126,7 +146,7 @@ export function calculateRoute(params) {
     log.push(`Best position reached: ${best.point.lat.toFixed(4)},${best.point.lon.toFixed(4)} (${best.distToEnd.toFixed(1)}NM from destination)`);
   }
 
-  return { route: null, log: log.join('\n') };
+  return { route: null, rawNodes: null, log: log.join('\n') };
 }
 
 function pruneIsochrone(points, minDistNm) {
@@ -143,15 +163,18 @@ function pruneIsochrone(points, minDistNm) {
   return kept;
 }
 
-function buildRoute(endNode, history, headingThreshold) {
+function collectRawNodes(endNode) {
   const path = [];
   let node = endNode;
-
   while (node) {
     path.unshift(node);
     node = node.parent;
   }
+  return path;
+}
 
+function buildRoute(endNode, history, headingThreshold) {
+  const path = collectRawNodes(endNode);
   return simplifyLegs(path, headingThreshold);
 }
 

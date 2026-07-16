@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Lizard peninsula — go south around it",
+    "start": { "lat": 50.08, "lon": -5.42 },
+    "end": { "lat": 50.15, "lon": -5.00 },
+    "expectRoute": true,
+    "description": "Mount's Bay to Falmouth Bay — direct line crosses the Lizard, must go south around it"
+  },
+  {
+    "name": "Open water baseline — no obstacles",
+    "start": { "lat": 50.30, "lon": -3.35 },
+    "end": { "lat": 50.48, "lon": -2.60 },
+    "expectRoute": true,
+    "description": "Lyme Bay — open water, no land in direct path"
+  },
+  {
+    "name": "Start Point — go around headland",
+    "start": { "lat": 50.17, "lon": -3.68 },
+    "end": { "lat": 50.37, "lon": -3.52 },
+    "expectRoute": true,
+    "description": "South of Start Point to Tor Bay — must go around headland"
+  },
+  {
+    "name": "Dartmoor inland start — should fail",
+    "start": { "lat": 50.60, "lon": -3.95 },
+    "end": { "lat": 50.35, "lon": -4.10 },
+    "expectRoute": false,
+    "description": "Start on Dartmoor (> 1 NM from coast) — isochrone collapses immediately"
+  },
+  {
+    "name": "Eddystone to Channel — no obstacles",
+    "start": { "lat": 50.18, "lon": -4.28 },
+    "end": { "lat": 50.10, "lon": -3.85 },
+    "expectRoute": true,
+    "description": "Eddystone area to Start Bay — open water south of Cornwall coast"
+  }
+]
