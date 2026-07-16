@@ -18,7 +18,8 @@ export async function calculateRoute(params) {
     start, end, departureTime, coastline,
     timeStepMinutes, headingThreshold, tidalCurrent,
     polars, windGrid,
-    constantSpeedKn, clearanceMarginNm, noGoAngleDeg
+    constantSpeedKn, clearanceMarginNm, noGoAngleDeg,
+    arriveByTime, allowIntoWind
   } = params;
 
   const timeStepHours = timeStepMinutes / 60;
@@ -71,7 +72,7 @@ export async function calculateRoute(params) {
           windSpd = wind.speed;
           const raw = h - wind.direction;
           twaVal = ((raw % 360) + 540) % 360 - 180;
-          const noGo = noGoAngleDeg ?? findNoGoAngle(polars, wind.speed);
+          const noGo = allowIntoWind ? 0 : (noGoAngleDeg ?? findNoGoAngle(polars, wind.speed));
           if (Math.abs(twaVal) < noGo) {
             zeroSpeed++;
             continue;
@@ -178,7 +179,16 @@ export async function calculateRoute(params) {
         const lonDir = leg.waypoint.lon < 0 ? 'W' : 'E';
         log.push(`  Leg ${i + 1}: ${leg.heading}°T ${leg.sog.toFixed(1)}kn ${leg.distance.toFixed(1)}NM ${leg.duration.toFixed(1)}h wind ${leg.windSpeed}kn from ${leg.windDir}° ${leg.windDescription}`);
       }
-      return { route, rawNodes, log: log.join('\n') };
+      return { route, rawNodes, log: log.join('\n'), reachedEnd: true };
+    }
+
+    if (arriveByTime && new Date(closest.time).getTime() >= new Date(arriveByTime).getTime()) {
+      log.push(`[Step ${step}] ARRIVE-BY TIME REACHED — stopping expansion at ${closest.time}`);
+      log.push(`---`);
+      log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
+      const rawNodes = collectRawNodes(closest);
+      const route = buildRoute(closest, history, headingThreshold);
+      return { route, rawNodes, log: log.join('\n'), reachedEnd: false, endNode: closest };
     }
 
     if (Date.now() - lastYield > YIELD_INTERVAL_MS) {
