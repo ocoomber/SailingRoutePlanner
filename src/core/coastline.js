@@ -98,7 +98,7 @@ function inAnyPolygon(point, rings) {
 const SAFE_DIST_NM = 1;
 const BROAD_DIST_NM = 1;
 
-export function crossesLand(coastline, a, b, startPt, endPt) {
+export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm = 0) {
   const dA = nearestNm(a, coastline.grid);
   const dB = nearestNm(b, coastline.grid);
 
@@ -121,6 +121,20 @@ export function crossesLand(coastline, a, b, startPt, endPt) {
     for (let i = 1; i < steps; i++) {
       const mid = interpolatePoint(a, b, i / steps);
       if (nearestNm(mid, coastline.grid) > BROAD_DIST_NM && inAnyPolygon(mid, coastline.outerRings)) return true;
+    }
+  }
+
+  if (clearanceMarginNm > 0) {
+    const stepSize = Math.min(clearanceMarginNm / 2, 0.5);
+    const nSteps = Math.max(1, Math.ceil(legDist / stepSize));
+
+    for (let i = 0; i <= nSteps; i++) {
+      const pt = i === 0 ? a : i === nSteps ? b : interpolatePoint(a, b, i / nSteps);
+
+      if (startPt && distanceNm(pt, startPt) < 0.1) continue;
+      if (endPt && distanceNm(pt, endPt) < 0.1) continue;
+
+      if (nearestNm(pt, coastline.grid) < clearanceMarginNm) return true;
     }
   }
 
