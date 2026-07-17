@@ -61,6 +61,12 @@ function round1(v) {
   return Math.round(v * 10) / 10;
 }
 
+// Positions need far more precision than the 1dp used for speeds/VMG —
+// 0.1° of latitude is ~11km, which would put decision markers in the wrong bay.
+function roundCoord(v) {
+  return Math.round(v * 1e5) / 1e5;
+}
+
 export function evaluateDecision(node, end, polars) {
   const bearingToDest = bearing(node.point, end);
 
@@ -119,7 +125,7 @@ export function evaluateDecision(node, end, polars) {
   return {
     kind: 'heading',
     step: 0,
-    position: { lat: round1(node.point.lat), lon: round1(node.point.lon) },
+    position: { lat: roundCoord(node.point.lat), lon: roundCoord(node.point.lon) },
     time: node.time,
     wind: {
       speed: Math.round(windSpeed),
@@ -161,7 +167,7 @@ export function analyzeRoute(rawNodes, end, polars) {
         kind: 'landDeviation',
         step: i,
         time: node.time,
-        position: { lat: round1(node.point.lat), lon: round1(node.point.lon) },
+        position: { lat: roundCoord(node.point.lat), lon: roundCoord(node.point.lon) },
         rejectedHeading: node.landDeviation.rejectedHeading,
         rejectedVmg: node.landDeviation.rejectedVmg,
         chosenHeading: Math.round(node.heading),

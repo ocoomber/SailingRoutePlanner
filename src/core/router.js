@@ -2,6 +2,7 @@ import { distanceNm, bearing, destination, addVectors } from './geometry.js';
 import { lookupSpeed, findNoGoAngle } from './polar.js';
 import { crossesLand } from '../data/coastline/index.js';
 import { interpolateWind } from './wind-interpolation.js';
+import { withinCorridor } from './route-corridor.js';
 
 const DEFAULT_HEADINGS = 36;
 const MAX_ISOCHRONE_SIZE = 200;
@@ -21,7 +22,8 @@ export async function calculateRoute(params) {
     timeStepMinutes, headingThreshold, tidalCurrent,
     polars, windGrid,
     constantSpeedKn, clearanceMarginNm, noGoAngleDeg,
-    arriveByTime, allowIntoWind, tackPenaltyKn = 0
+    arriveByTime, allowIntoWind, tackPenaltyKn = 0,
+    corridor = null
   } = params;
 
   const timeStepHours = timeStepMinutes / 60;
@@ -63,6 +65,16 @@ export async function calculateRoute(params) {
     for (const node of isochrone) {
       const brgToEnd = bearing(node.point, end);
 
+      // Wind and the no-go angle depend only on where and when this node is —
+      // not on the candidate heading. Sampling them once per node instead of
+      // once per heading is ~36x fewer lookups and changes nothing.
+      const nodeWind = constantSpeedKn
+        ? null
+        : interpolateWind(windGrid, node.point.lat, node.point.lon, node.time);
+      const nodeNoGo = (constantSpeedKn || allowIntoWind)
+        ? 0
+        : (noGoAngleDeg ?? findNoGoAngle(polars, nodeWind.speed));
+
       for (let h = 0; h < 360; h += headingStep) {
         let boatSpeed;
         let twaVal = 0;
@@ -72,17 +84,15 @@ export async function calculateRoute(params) {
         if (constantSpeedKn) {
           boatSpeed = constantSpeedKn;
         } else {
-          const wind = interpolateWind(windGrid, node.point.lat, node.point.lon, node.time);
-          windDirVal = wind.direction;
-          windSpd = wind.speed;
-          const raw = h - wind.direction;
+          windDirVal = nodeWind.direction;
+          windSpd = nodeWind.speed;
+          const raw = h - nodeWind.direction;
           twaVal = ((raw % 360) + 540) % 360 - 180;
-          const noGo = allowIntoWind ? 0 : (noGoAngleDeg ?? findNoGoAngle(polars, wind.speed));
-          if (Math.abs(twaVal) < noGo) {
+          if (Math.abs(twaVal) < nodeNoGo) {
             zeroSpeed++;
             continue;
           }
-          boatSpeed = lookupSpeed(polars, Math.abs(twaVal), wind.speed);
+          boatSpeed = lookupSpeed(polars, Math.abs(twaVal), nodeWind.speed);
         }
 
         if (boatSpeed <= 0) {
@@ -100,7 +110,13 @@ export async function calculateRoute(params) {
         const distNm = moveVector.speed * timeStepHours;
         const newPoint = destination(node.point, moveVector.direction, distNm);
 
-        if (crossesLand(coastline, node.point, newPoint, start, null, clearanceMarginNm)) {
+        // Stay within the rough-route corridor. This is what stops the fine
+        // isochrone diverting up a river the rough course already skipped.
+        if (corridor && !withinCorridor(newPoint, corridor)) {
+          continue;
+        }
+
+        if (crossesLand(coastline, node.point, newPoint, start, end, clearanceMarginNm)) {
           landBlocked++;
           if (step < 3) {
             log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);

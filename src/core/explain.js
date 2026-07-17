@@ -80,7 +80,13 @@ function formatDurationMin(mins) {
   return `${rounded} minute${rounded === 1 ? '' : 's'}`;
 }
 
+// Accept/reject is decided FIRST: a refused change must never be narrated as
+// though it happened. The trigger only supplies the reason.
 export function formatConfigDecision(rec) {
+  return rec.accepted ? acceptedConfigProse(rec) : rejectedConfigProse(rec);
+}
+
+function acceptedConfigProse(rec) {
   if (rec.trigger === 'final-approach') {
     return `Within ${Math.round(rec.windowMin)} minutes of destination — sails down, motoring in for arrival.`;
   }
@@ -93,19 +99,25 @@ export function formatConfigDecision(rec) {
     return `Wind building to ${rec.windSpeedKn}kn — reefing down for comfort.`;
   }
 
-  if (rec.trigger === 'hysteresis') {
-    return `Wind at ${rec.windSpeedKn}kn — not yet clear of the motor-off threshold, staying under engine.`;
-  }
-
   if (rec.trigger === 'router-fallback') {
     return `No sailable route found in this wind — falling back to motor.`;
   }
 
   const posText = POINT_OF_SAIL_PHRASE[rec.pointOfSail] || rec.pointOfSail;
   const durationText = formatDurationMin(rec.windowMin);
+  return `Wind forecast to hold around ${rec.windSpeedKn}kn for the next ${durationText} on ${posText} — worth ${CONFIG_VERB[rec.to]} ${CONFIG_LABEL[rec.to]}.`;
+}
 
-  if (rec.accepted) {
-    return `Wind forecast to hold around ${rec.windSpeedKn}kn for the next ${durationText} on ${posText} — worth ${CONFIG_VERB[rec.to]} ${CONFIG_LABEL[rec.to]}.`;
+function rejectedConfigProse(rec) {
+  if (rec.trigger === 'hysteresis') {
+    // Direction matters: the band holds off starting the engine as well as stopping it.
+    return rec.to === 'motor'
+      ? `Wind at ${rec.windSpeedKn}kn — still above the engine-on threshold, staying under sail rather than flip-flopping.`
+      : `Wind at ${rec.windSpeedKn}kn — not yet clear of the engine-off threshold, staying under engine.`;
+  }
+
+  if (rec.trigger === 'wind-above-reef') {
+    return `Wind building to ${rec.windSpeedKn}kn, but only for ~${Math.round(rec.windowMin)} minutes (needs ${Math.round(rec.thresholdMin)}) — not worth reefing down for that long.`;
   }
 
   return `Wind window of ~${Math.round(rec.windowMin)} minutes at ${rec.windSpeedKn}kn expected before dropping again — not worth ${CONFIG_VERB[rec.to]} ${CONFIG_LABEL[rec.to]} for that short a stretch.`;

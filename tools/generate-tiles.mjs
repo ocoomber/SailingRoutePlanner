@@ -143,6 +143,24 @@ for (const [key, segments] of tileMap) {
   tileCount++;
 }
 
+const manifestTiles = Array.from(tileMap.keys()).sort();
+const manifestBbox = { north: -90, south: 90, east: -180, west: 180 };
+for (const key of manifestTiles) {
+  const [z, x, y] = key.split('/').map(Number);
+  const b = tileBounds(z, x, y);
+  if (b.north > manifestBbox.north) manifestBbox.north = b.north;
+  if (b.south < manifestBbox.south) manifestBbox.south = b.south;
+  if (b.east > manifestBbox.east) manifestBbox.east = b.east;
+  if (b.west < manifestBbox.west) manifestBbox.west = b.west;
+}
+
+writeFileSync(join(ROOT, 'tiles/coastline', 'manifest.json'), JSON.stringify({
+  zoom: ZOOM,
+  bbox: manifestBbox,
+  tiles: manifestTiles
+}));
+
 console.log(`Generated ${tileCount} tiles at zoom ${ZOOM}`);
 console.log(`Outer ring pieces: ${totalPieces} (largest ${maxPiecePoints} points)`);
+console.log(`Manifest: ${manifestTiles.length} tiles, bbox ${JSON.stringify(manifestBbox)}`);
 console.log(`Output: tiles/coastline/${ZOOM}/`);

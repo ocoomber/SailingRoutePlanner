@@ -41,7 +41,40 @@ export function loadCoastline(data) {
   }
   data.grid = grid;
   data.outerRingBboxes = buildRingBboxes(data.outerRings);
+  buildRingGrid(data);
   return data;
+}
+
+// A cell -> ring-index map so containment can scan only the rings near a point
+// instead of every ring. Detail-tile coastlines have hundreds of small ring
+// pieces; without this, each land test scanned them all. Rings whose bbox spans
+// a lot of cells (a big landmass) go in a small "global" list tested every time,
+// so they don't bloat the grid.
+const RING_GRID_MAX_CELLS = 400;
+
+function buildRingGrid(data) {
+  const ringGrid = {};
+  const globalRings = [];
+  const bboxes = data.outerRingBboxes;
+
+  for (let i = 0; i < bboxes.length; i++) {
+    const bb = bboxes[i];
+    const cx1 = Math.floor(bb.west / CELL_SIZE), cx2 = Math.floor(bb.east / CELL_SIZE);
+    const cy1 = Math.floor(bb.south / CELL_SIZE), cy2 = Math.floor(bb.north / CELL_SIZE);
+    if ((cx2 - cx1 + 1) * (cy2 - cy1 + 1) > RING_GRID_MAX_CELLS) {
+      globalRings.push(i);
+      continue;
+    }
+    for (let cx = cx1; cx <= cx2; cx++) {
+      for (let cy = cy1; cy <= cy2; cy++) {
+        const key = (cx * CELL_SIZE).toFixed(3) + ',' + (cy * CELL_SIZE).toFixed(3);
+        (ringGrid[key] || (ringGrid[key] = [])).push(i);
+      }
+    }
+  }
+
+  data.outerRingGrid = ringGrid;
+  data.outerRingGlobalRings = globalRings;
 }
 
 function nearCells(pt) {
@@ -101,27 +134,53 @@ function segsCross(grid, a, b) {
   return false;
 }
 
-export function inAnyPolygon(point, rings, bboxes) {
+function ringHit(point, rings, bboxes, i) {
+  if (bboxes) {
+    const b = bboxes[i];
+    if (point.lat < b.south || point.lat > b.north ||
+        point.lon < b.west || point.lon > b.east) return false;
+  }
+  return pointInPolygon(point, rings[i]);
+}
+
+// Grid-accelerated when a ringGrid is supplied (built by loadCoastline), linear
+// otherwise so ad-hoc callers still work.
+export function inAnyPolygon(point, rings, bboxes, ringGrid, globalRings) {
   if (!rings) return false;
-  for (let i = 0; i < rings.length; i++) {
-    if (bboxes) {
-      const b = bboxes[i];
-      if (point.lat < b.south || point.lat > b.north ||
-          point.lon < b.west || point.lon > b.east) continue;
+
+  if (ringGrid) {
+    const cx = Math.floor(point.lon / CELL_SIZE) * CELL_SIZE;
+    const cy = Math.floor(point.lat / CELL_SIZE) * CELL_SIZE;
+    const candidates = ringGrid[cx.toFixed(3) + ',' + cy.toFixed(3)];
+    if (candidates) {
+      for (const i of candidates) if (ringHit(point, rings, bboxes, i)) return true;
     }
-    if (pointInPolygon(point, rings[i])) return true;
+    if (globalRings) {
+      for (const i of globalRings) if (ringHit(point, rings, bboxes, i)) return true;
+    }
+    return false;
+  }
+
+  for (let i = 0; i < rings.length; i++) {
+    if (ringHit(point, rings, bboxes, i)) return true;
   }
   return false;
 }
 
 function landContains(coastline, point) {
   if (coastline.containsLand) return coastline.containsLand(point);
-  return inAnyPolygon(point, coastline.outerRings, coastline.outerRingBboxes);
+  return inAnyPolygon(point, coastline.outerRings, coastline.outerRingBboxes,
+    coastline.outerRingGrid, coastline.outerRingGlobalRings);
 }
 
 const SAFE_DIST_NM = 1;
 const BROAD_DIST_NM = 1;
-const ENDPOINT_CLEARANCE_EXEMPT_NM = 1;
+// Near the start/end the clearance margin is waived so the boat can leave and
+// enter a harbour (the actual land-crossing tests still apply, so it can't cut
+// through land — it just gets to hug the berth). Coastal passages always begin
+// and end near land, so this exemption must exist. It is applied for BOTH ends
+// during the search (router.js passes start and end).
+const ENDPOINT_CLEARANCE_EXEMPT_NM = 0.5;
 
 export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm = 0) {
   const dA = nearestNm(a, coastline.grid);

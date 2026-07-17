@@ -57,10 +57,14 @@ async function testLongBeamReach() {
   const result = await runPassage(end, windGrid, {});
   const configs = result.configBlocks.map(b => b.config);
   const hoisted = result.configBlocks.find(b => (b.config === 'full' || b.config === 'headsail') && b.decision && b.decision.accepted);
-  const pass = configs[0] === 'motor' && configs[configs.length - 1] === 'motor' &&
-    configs.some(c => c === 'full' || c === 'headsail') &&
+  // In a steady 15kn the boat sails from the off (an accepted hoist decision at
+  // departure) and motors only for the final approach. There is no leading motor
+  // block — that used to appear only because the old coarse pass seeded the
+  // timeline with a windSpeed:0 root node.
+  const pass = configs.some(c => c === 'full' || c === 'headsail') &&
+    configs[configs.length - 1] === 'motor' &&
     hoisted && hoisted.decision.windowMin >= hoisted.decision.thresholdMin;
-  return report('Long beam reach', '15kn abeam, 30NM', pass, `blocks: ${configs.join(' -> ')}`, result);
+  return report('Long beam reach', '15kn abeam, 30NM (sails from the off, motors in)', pass, `blocks: ${configs.join(' -> ')}`, result);
 }
 
 async function testShortWindWindow() {

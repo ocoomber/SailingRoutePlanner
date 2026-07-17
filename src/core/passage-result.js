@@ -1,17 +1,3 @@
-import { bearing } from './geometry.js';
-
-export function buildTimeline(rawNodes, end) {
-  const arrivalTime = new Date(rawNodes[rawNodes.length - 1].time).getTime();
-  return rawNodes.map(node => ({
-    time: node.time,
-    position: node.point,
-    windSpeed: node.windSpeed,
-    windDir: node.windDir,
-    bearingToDest: bearing(node.point, end),
-    remainingMin: (arrivalTime - new Date(node.time).getTime()) / 60000
-  }));
-}
-
 export function computeLegStartTimes(legs, departureTime) {
   let t = new Date(departureTime).getTime();
   const times = [];
@@ -22,25 +8,40 @@ export function computeLegStartTimes(legs, departureTime) {
   return times;
 }
 
+// Copies every block — callers keep the unmerged array (debug.configBlocksRaw),
+// which the decision trail reads for per-block decisions the merge would absorb.
 export function mergeAdjacentConfigBlocks(blocks) {
-  if (blocks.length <= 1) return blocks;
-  const merged = [blocks[0]];
+  if (blocks.length === 0) return [];
+  const merged = [{ ...blocks[0] }];
   for (let i = 1; i < blocks.length; i++) {
     const prev = merged[merged.length - 1];
     const cur = blocks[i];
     if (cur.config === prev.config) {
       prev.endTime = cur.endTime;
       prev.endPoint = cur.endPoint;
+      prev.legEndIndex = cur.legEndIndex;
     } else {
-      merged.push(cur);
+      merged.push({ ...cur });
     }
   }
   return merged;
 }
 
-export function buildWarnings(tidalData) {
-  const warnings = ['Planning aid based on forecast, not real-time instruction'];
+// planningNotes are findings from this specific plan (clearance had to be
+// relaxed, the passage stops short) — they go first, because they change how the
+// rest of the plan should be read.
+export function buildWarnings(tidalData, uncomfortableLegs = [], params = null, planningNotes = []) {
+  const warnings = [...planningNotes];
+  warnings.push('Planning aid based on forecast, not real-time instruction');
   if (!tidalData) warnings.push('Tidal stream not modelled');
+
+  if (uncomfortableLegs.length > 0 && params) {
+    const peak = Math.max(...uncomfortableLegs.map(l => l.windSpeed));
+    warnings.push(
+      `${uncomfortableLegs.length} leg${uncomfortableLegs.length > 1 ? 's' : ''} forecast above your max comfort wind (${params.maxComfortWindKn}kn) — peak ${peak}kn. Routing unchanged.`
+    );
+  }
+
   warnings.push('Forecast can be wrong', 'Cross-check against chart before departure');
   return warnings;
 }
@@ -78,6 +79,6 @@ export function buildFailureResult(start, end, departureTime, tidalData, log) {
     decisions: [],
     narration: 'No route could be found for this passage.',
     warnings: buildWarnings(tidalData),
-    debug: { log, rawNodes: [] }
+    debug: { log, rawNodes: [], configBlocksRaw: [] }
   };
 }
