@@ -127,6 +127,56 @@ Beneteau Oceanis Clipper 393. Polar: ORC-certified same-model proxy
 - `tools/` — Build-time scripts (tile generation, coastline
   simplification), run in CI by `.github/workflows/deploy.yml`
 - `tiles/coastline/{z}/{x}/{y}.json` — generated static coastline tiles
+- `tiles/coastline/manifest.json` — generated list of which tiles exist +
+  the data bbox. The client fetches only tiles in the manifest, so open
+  water produces no 404s and can be labelled "no land tile" rather than
+  "not loaded". **Regenerate with `node tools/generate-tiles.mjs`
+  whenever the coastline source changes.**
+
+### UI structure (debug tool, map-first)
+- `index.html` holds two full-screen views: `#view-map` and
+  `#view-settings`, switched by URL hash via `src/ui/views.js`. One
+  document on purpose — a separate settings page would re-fetch the
+  polars and coarse coastline, discard every loaded detail tile, and lose
+  the map position and computed route.
+- Floating panels (Layers, Decision trail) are **siblings of `#map`, never
+  children**: as children, every click on a panel also reaches Leaflet and
+  moves the start/end marker. They sit at `--z-panel: 1100` to clear
+  Leaflet's own controls (400–1000).
+- `src/ui/map/` — the map module, split by responsibility:
+  - `map-core.js` — lifecycle, start/end markers, viewport, `fitToLegs`.
+    `fitBounds` is called by `passage-run.js`, **not** by a layer: layers
+    must never steal the viewport.
+  - `layer-registry.js` — the ONLY place Leaflet layers are added/removed.
+  - `layer-defs.js` — every overlay declared once (label, description,
+    swatch, `dependsOn`, `build`). The Layers panel renders from this.
+  - `layers/*.js` — pure builders, `build(state) -> L.Layer[]`. They never
+    read the map; anything viewport-dependent takes `state.bounds`.
+  - `leg-styles.js` / `leg-tooltip.js` — pure; single source of truth for
+    sail-config colours, shared by the map legend and the trail cards.
+- `src/ui/selection.js` — shared leg selection. Every change carries an
+  `origin`; the map only pans when origin is `'trail'` and the trail only
+  scrolls when origin is `'map'`. Without that guard the two panels chase
+  each other in a feedback loop.
+- `src/ui/app-state.js` — the render state layers draw from. **Replace a
+  key, never mutate what it points at** — `dependsOn` uses identity
+  comparison to decide what rebuilds.
+- `src/ui/settings-schema.js` — every tunable number with a plain-English
+  description of what it ACTUALLY does. Deliberately over the line ceiling:
+  it is one coherent data table. If you change engine behaviour, change the
+  description in the same edit.
+- `src/ui/settings-store.js` — persists **sparse overrides only** to
+  `localStorage['srp.settings.v1']`, keyed by schema path. Never a full
+  snapshot: untouched values keep following the engine defaults.
+
+### Layer registry rules (easy to get wrong)
+- Visibility is `addLayer`/`removeLayer` on a persistent group — **never a
+  rebuild**. Toggling stays instant and keeps selection.
+- Selection restyles existing handles via `setStyle` — **never triggers
+  `render()`**. Rebuilding polylines on hover flickers and drops bindings.
+- Fine land and coarse land are **separate, independent layers**. They were
+  once drawn into one group behind one checkbox, which made the fine
+  coastline impossible to assess on its own. Do not re-merge them.
 
 ## Coding Rules
 - Follow `coding-constitution.yaml` in full
@@ -198,6 +248,153 @@ debug checks.
   narration are primary outputs (for the AI-agent consumer), UI panels
   render the same records
 
+### Engine-on/off hysteresis band
+`engineOnWindKn` (4) and `engineOffWindKn` (6) form a dead band: inside it
+the boat keeps whatever it is already doing rather than flip-flopping in
+marginal air. `passesHysteresis` gates BOTH directions; **final-approach
+motoring deliberately bypasses the band**. `minSailableWindKn` (5) sits
+inside the band and only sets the *preferred* config — the band decides
+when the switch actually happens. This is coherent because
+`changeDurationThresholdMin(→motor)` is 0, so the band is the only lever
+that can hold off the engine. The 4kn default is also the lowest TWS the
+polar has data for, so below it the boat genuinely cannot sail.
+
+`maxComfortWindKn` (25) is **advisory only** — it flags legs
+(`leg.comfortExceeded`) and adds a passage warning. It never reroutes.
+
+### Coastal clearance cascade
+The coarse pass starts at `COARSE_CLEARANCE_NM` (2) and relaxes through
+`NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM` until a route exists. **Whichever margin
+worked must be carried into the fine pass** (`effectiveClearanceNm =
+min(requested, coarseClearanceUsedNm)`) — it once wasn't, so the planner would
+prove 0.5NM impossible, then route the fine pass at 0.5NM anyway and the passage
+died. When it is reduced below what the skipper asked for, say so in `warnings`.
+Measured out of Falmouth: 2NM cannot leave the harbour at all (every heading is
+blocked, fails in 3ms); 0.5NM cannot reach Penzance (stalls 0.8NM off); 0.2NM
+works. `summary.clearanceMarginUsedNm` reports what was actually used.
+
+### Truncated passages must declare themselves
+`executeBlocks` breaks out of its loop when a block finds no route, so
+`execution.legs` can stop well short of the destination while still looking like
+a successful result (`summary.arrivalTime` is computed from summed leg durations
+regardless). `passage-planner` checks the shortfall against
+`ARRIVAL_SHORTFALL_NM` and sets `summary.reachedDestination` /
+`summary.shortfallNm`, and pushes an INCOMPLETE PASSAGE warning. Never present a
+short route as a passage to the destination.
+
+### Two-tier routing: rough course, then sail the corridor
+The greedy isochrone alone wandered (up rivers, round headlands). It is now
+wrapped by a rough-course first pass, modelled on how a skipper works:
+1. **Rough course** — `src/core/rough-route.js` `computeRoughRoute`. A shortest
+   path across a VISIBILITY GRAPH over the **coarse** land (which fills rivers
+   in, so the string can't go up one). Nodes are coarse-ring corners near the
+   passage, nudged into open water; edges are clear-water `crossesLand` tests;
+   Dijkstra finds the taut string. One leg in open water (fixes the 36-heading
+   wobble); rounds headlands like the skipper's own GPX. Also used verbatim by
+   **route-only mode** (`passage-run.js`), so route-only no longer runs the
+   greedy router.
+2. **Corridor** — `src/core/route-corridor.js`. The rough polyline + a
+   half-width (`CORRIDOR_WIDTH_NM = 3`). `router.js` rejects any candidate whose
+   lateral offset exceeds it, so the sailing isochrone can't divert off the
+   course (no more Helford strand). Falmouth→Penzance now reaches the
+   destination.
+3. **Timeline** — `src/core/route-timeline.js` `buildTimelineAlongRoute` walks
+   the rough course through the forecast to feed the config planner. This
+   REPLACED the old coarse isochrone pass. NB: the old pass's leading `motor`
+   block was an artifact of the router's root node carrying `windSpeed: 0` — the
+   walker samples real wind at departure, so a passage in sailing wind now
+   correctly starts under sail.
+
+**Performance guards (both essential — without them a real passage takes minutes):**
+- `pruneCoastlineToCorridor` (route-corridor.js) filters the fine coastline to
+  the corridor band before routing, so land far from the course can't be tested.
+- `loadCoastline` builds an **`outerRingGrid`** (cell → ring indices) and
+  `inAnyPolygon` uses it, so containment scans only rings near the point, not
+  every loaded detail-tile ring. Big rings (>400 cells) go in a small global
+  list. This is the containment analogue of the segment grid.
+
+### KNOWN LIMITATION — light-air passages are slow and over-tack
+The corridor fixes *correctness* (reaches the destination, no wander) but the
+sailing isochrone inside it is still greedy best-first on
+`cost = distToEnd + maneuverPenalty`, with no elapsed-time term. On a long
+light/variable-wind beat (e.g. Falmouth→Penzance in real forecast wind) it
+produces many short tacks (100+ legs) and takes tens of seconds. That is a
+distinct problem from the wander — it needs a real cost function (A*-style
+elapsed time + admissible heuristic) and stronger light-air tack damping. Use
+`logs/route-latest.json` (leg-by-leg wind/tack/config) to diagnose. Do not paper
+over it with clearance or corridor tweaks.
+
+### Endpoint clearance (leaving/entering a harbour)
+Coastal passages always start and end near land, so clearance must relax there.
+`crossesLand` waives the margin within `ENDPOINT_CLEARANCE_EXEMPT_NM` (0.5) of
+`start`/`end` — the land-crossing tests still apply, so it hugs the berth without
+cutting through land. **`router.js` expansion must pass BOTH `start` and `end`**
+(it once passed `end` as `null`, so arrival was never exempt and a harbour
+destination was unreachable — stalled ~0.8NM off). Default coastal clearance is
+`0.25` NM (`ROUTING_DEFAULTS`, `DEFAULT_ROUTER_OPTS`).
+
+### Debug log is a file, not the on-screen panel
+Every route POSTs a structured JSON log to `POST /debug-log`
+(`src/services/debug-log.js` → `server/index.js`), written to
+`logs/route-latest.json` (+ timestamped copy, `logs/` gitignored). Assembled by
+the pure `src/core/route-log.js`. **Read that file to debug a route** — the user
+does not copy/paste. This is why `start.cmd` now runs `node server/index.js`
+(serves the app AND receives logs) instead of a static server. The server's
+entry check uses `pathToFileURL(process.argv[1])` so it actually listens on
+Windows (the old `file://${argv[1]}` never matched).
+
+### Wind field interpolation (`src/core/wind-interpolation.js`)
+The forecast is a **4x4 lattice** (`samplePoints(area, 4)` in `services/wind.js`)
+— roughly 13NM x 7NM spacing over a typical passage. How it is sampled matters
+enormously:
+- **Space is bilinear on vector (u/v) components.** It was once
+  nearest-neighbour, which turned the lattice into four hard Voronoi cells:
+  crossing an invisible boundary snapped wind direction by up to ~120° in one
+  step, flipping TWA sign. The router answered with spurious tacks/gybes and
+  wandering, and the config planner thrashed motor↔sail across the same
+  boundaries — routes came out as a visible tangle. Route-only mode looked fine
+  purely because it never reads the wind. **Do not go back to nearest-neighbour.**
+  Working in u/v also handles the 0°/360° wrap and lets opposing light airs blend
+  toward calm (physically right where airstreams meet).
+- **Time stays polar** (speed linear, direction along the shortest arc). A
+  forecast frame is a state evolving, not a vector to average: 10kn veering to
+  20kn must pass through ~15kn, and a wind reversing across an hour must not
+  vector-average to a false calm at the midpoint. `tests/sailing-harness.mjs`
+  and `tests/wind-interpolation-harness.mjs` both pin this.
+- **Sample wind once per node, never per heading.** `router.js` hoists
+  `interpolateWind` and `findNoGoAngle` out of the heading loop — they depend
+  only on the node's position/time. Putting them back inside costs ~36x.
+
+### Data-shape traps (verified — a debug tool that gets these wrong lies)
+- **Never pair decisions to legs by timestamp.** `decision.time` comes from
+  the coarse-pass timeline; `leg.startTime` is a cumulative sum of
+  fine-pass durations. Two independent clocks that drift, so boundary
+  records get misattributed. Pair **structurally by index**:
+  `configBlocks[].legStartIndex`/`legEndIndex` (set in
+  `passage-block-executor.js`), and `classifyTransition(legs[i-1], legs[i])`
+  which is index-aligned by construction.
+- `debug.configBlocksRaw` is the **unmerged** blocks.
+  `mergeAdjacentConfigBlocks` copies (it used to mutate its input) and
+  absorbs decisions, which would lose `router-fallback` records. The trail
+  reads the raw ones.
+- **`leg.maneuver` marks the END of the leg it sits on** ("tack at the end
+  of this leg"), not the start. Draw the marker at `endWaypoint`.
+- **`leg.config` only exists on legs from `executeBlocks`.** Route-only /
+  geometry mode legs have no `config` — always guard.
+- `leg.windAngle` is **absolute**; `tackSide` is the only place the TWA
+  sign survives.
+- `decisions[].step` is a rawNode index **within its block** and restarts
+  per block — never use it as a leg index.
+- `heading` decisions fire once per raw node, so they vastly outnumber legs.
+  They are not attached to cards and get no map layer.
+- Decision positions use `roundCoord` (5dp). The shared `round1` is for
+  speeds/VMG only — using it on lat/lon put markers ~11km out.
+- `formatConfigDecision` checks `accepted` FIRST, then the trigger supplies
+  the reason. A refused change must never render affirmative prose.
+- `config-planner` re-evaluates on **every** step; `lastEvaluatedIdeal` only
+  de-duplicates the rejection log. It must never gate the evaluation itself,
+  or a change refused once (e.g. by the band) can never pass later.
+
 ## Warnings (must appear in every output — UI and API)
 - Planning aid based on forecast, not real-time instruction
 - Tidal stream not modelled unless data supplied
@@ -219,6 +416,22 @@ debug checks.
   `planPassage()` end-to-end (6 scenarios: light air, long beam reach,
   short wind window, final-approach override, solo-vs-crewed hassle,
   reef trigger)
+- `tests/rough-route-harness.mjs` — The rough-course engine (5 scenarios):
+  open water is one leg (Issue 2), the course clears the coast and rounds the
+  Lizard, tracks the skipper's GPX within tolerance, and never enters the
+  Helford.
+- `tests/wind-interpolation-harness.mjs` — The wind field (8 scenarios). Guards
+  the nearest-neighbour regression: asserts the field is smooth (no >5° step
+  across a 356°→234° contrast), that space blends and wraps through north, that
+  opposing light airs cancel in space, and that TIME stays polar (10kn@350° →
+  20kn@10° passes through 15kn@0°; a reversing wind keeps its strength).
+- `tests/comfort-band-harness.mjs` — The engine-on/off hysteresis band and
+  the max-comfort advisory (5 scenarios). Drives `planConfigurations`
+  directly with a synthetic timeline, so the band is asserted exactly with
+  no router or polar interpolation in the way. Covers: band holds at 4.5kn
+  then releases at 3.5kn; a refused change does not latch the engine out;
+  final approach bypasses the band; comfort ceiling warns without
+  rerouting.
 - `tests/api.mjs` — Boots `server/index.js` on an ephemeral port with a
   stubbed wind fetch, exercises `/health` and `/plan-route` (valid
   request, validation errors, debug flag)

@@ -23,9 +23,11 @@ export class SmartCoastline {
 
   containsLand(point) {
     if (this.hasTileForPoint(point.lat, point.lon)) {
-      return inAnyPolygon(point, this.fine.outerRings, this.fine.outerRingBboxes);
+      return inAnyPolygon(point, this.fine.outerRings, this.fine.outerRingBboxes,
+        this.fine.outerRingGrid, this.fine.outerRingGlobalRings);
     }
-    return inAnyPolygon(point, this.coarse.outerRings, this.coarse.outerRingBboxes);
+    return inAnyPolygon(point, this.coarse.outerRings, this.coarse.outerRingBboxes,
+      this.coarse.outerRingGrid, this.coarse.outerRingGlobalRings);
   }
 
   hasTileForPoint(lat, lon) {

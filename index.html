@@ -3,152 +3,119 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sailing Passage Planner — SW England</title>
+  <title>Sailing Passage Planner — Debug Tool</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>Sailing Passage Planner</h1>
-    <p class="subtitle">Phase 1 — Pre-departure planning for SW England waters — <span class="build-number">Build 46 — 2026-07-16 23:47 UTC</span></p>
-  </header>
-
-  <main>
-    <div class="app-layout">
-      <aside class="panel controls-panel">
-        <section class="control-group">
-          <h2>Route</h2>
-          <div class="input-row">
-            <label for="start-lat">Start Lat</label>
-            <input type="number" id="start-lat" step="any" placeholder="50.2660">
-          </div>
-          <div class="input-row">
-            <label for="start-lon">Start Lon</label>
-            <input type="number" id="start-lon" step="any" placeholder="-5.0527">
-          </div>
-          <div class="input-row">
-            <label for="end-lat">End Lat</label>
-            <input type="number" id="end-lat" step="any" placeholder="50.4200">
-          </div>
-          <div class="input-row">
-            <label for="end-lon">End Lon</label>
-            <input type="number" id="end-lon" step="any" placeholder="-3.5600">
-          </div>
-          <p class="hint">Or click the map to set points</p>
-        </section>
-
-        <section class="control-group">
-          <h2>Target Time (UTC)</h2>
-          <div class="input-row radio-row">
-            <input type="radio" name="time-mode" id="mode-departure" value="departure" checked>
-            <label for="mode-departure">Target departure</label>
-          </div>
-          <div class="input-row radio-row">
-            <input type="radio" name="time-mode" id="mode-arrival" value="arrival">
-            <label for="mode-arrival">Target arrival</label>
-          </div>
-          <div class="input-row">
-            <label for="departure-date">Date (UTC)</label>
-            <input type="date" id="departure-date">
-          </div>
-          <div class="input-row">
-            <label for="departure-time">Time (UTC)</label>
-            <input type="time" id="departure-time" step="900">
-          </div>
-          <p class="hint" id="time-hint">When you plan to leave</p>
-          <p class="hint">Times are in UTC</p>
-        </section>
-
-        <section class="control-group">
-          <h2>Options</h2>
-          <div class="input-row">
-            <label for="time-step">Time Step (min)</label>
-            <input type="number" id="time-step" value="15" min="5" max="60" step="5">
-          </div>
-          <div class="input-row">
-            <label for="heading-threshold">Min Heading Change (°)</label>
-            <input type="number" id="heading-threshold" value="15" min="5" max="45" step="5">
-          </div>
-          <div class="input-row checkbox-row">
-            <input type="checkbox" id="show-land-overlay">
-            <label for="show-land-overlay">Show land overlay (debug)</label>
-          </div>
-          <div class="input-row checkbox-row">
-            <input type="checkbox" id="geometry-mode">
-            <label for="geometry-mode">Route-only mode <span class="hint">(no sailing logic, skip wind fetch)</span></label>
-          </div>
-          <div class="input-row checkbox-row">
-            <input type="checkbox" id="show-sailing-debug">
-            <label for="show-sailing-debug">Show sailing debug <span class="hint">(tack colors, TWA labels)</span></label>
-          </div>
-          <details class="debug-section">
-            <summary>Coastline debug</summary>
-            <div class="input-row checkbox-row">
-              <input type="checkbox" id="show-coarse-overlay">
-              <label for="show-coarse-overlay">Coarse map layer</label>
-            </div>
-            <div class="input-row checkbox-row">
-              <input type="checkbox" id="show-tile-grid">
-              <label for="show-tile-grid">Tile grid overlay</label>
-            </div>
-            <div class="input-row checkbox-row">
-              <input type="checkbox" id="show-tile-states">
-              <label for="show-tile-states">Tile state colour-coding</label>
-            </div>
-          </details>
-          <div class="input-row">
-            <label for="clearance-margin">Coastal Clearance (NM)</label>
-            <input type="number" id="clearance-margin" value="0.5" min="0" max="2" step="0.1">
-          </div>
-          <p class="hint">Minimum distance from coast (0 = disabled)</p>
-        </section>
-
-        <section class="control-group">
-          <h2>Tidal Current (Optional)</h2>
-          <div class="input-row checkbox-row">
-            <input type="checkbox" id="enable-tides">
-            <label for="enable-tides">Supply tidal data</label>
-          </div>
-          <div id="tide-input" class="hidden">
-            <textarea id="tide-data" rows="4" placeholder="hour, direction°, speed knots&#10;0, 270, 1.2&#10;1, 275, 1.4&#10;..."></textarea>
-            <p class="hint">CSV: hour, direction (° true), speed (knots)</p>
-          </div>
-        </section>
-
-        <button id="calculate-btn" class="primary-btn">Calculate Route</button>
-        <button id="clear-btn" class="secondary-btn">Clear</button>
-      </aside>
-
-      <div class="panel map-panel">
-        <div id="map"></div>
+  <!-- MAP VIEW -->
+  <div id="view-map" class="view">
+    <header class="command-bar">
+      <div class="command-brand">
+        <strong>Passage Planner</strong>
+        <span class="build-number">Build 47 — 2026-07-17 19:59 UTC</span>
       </div>
 
-      <aside class="panel results-panel">
-        <div id="results" class="hidden">
-          <h2>Passage Plan</h2>
-          <div id="route-summary"></div>
-          <div id="route-warnings"></div>
-          <ol id="leg-list"></ol>
-        </div>
+      <div class="command-group">
+        <label for="start-lat">Start</label>
+        <input type="number" id="start-lat" step="any" placeholder="lat" class="coord-input">
+        <input type="number" id="start-lon" step="any" placeholder="lon" class="coord-input">
+      </div>
 
-        <div id="debug-log" class="hidden">
-          <h2>Debug Log <span class="hint">(copy to paste back for troubleshooting)</span></h2>
-          <pre id="debug-log-content"></pre>
+      <div class="command-group">
+        <label for="end-lat">End</label>
+        <input type="number" id="end-lat" step="any" placeholder="lat" class="coord-input">
+        <input type="number" id="end-lon" step="any" placeholder="lon" class="coord-input">
+      </div>
+
+      <div class="command-group">
+        <div class="radio-inline">
+          <input type="radio" name="time-mode" id="mode-departure" value="departure" checked>
+          <label for="mode-departure">Depart</label>
+          <input type="radio" name="time-mode" id="mode-arrival" value="arrival">
+          <label for="mode-arrival">Arrive</label>
+        </div>
+        <input type="date" id="departure-date">
+        <input type="time" id="departure-time" step="900">
+      </div>
+
+      <div class="command-group">
+        <label class="checkbox-inline" title="Skip the sailing logic and wind fetch — geometry only">
+          <input type="checkbox" id="geometry-mode">
+          Route-only
+        </label>
+      </div>
+
+      <div class="command-actions">
+        <button id="calculate-btn" class="primary-btn">Calculate Route</button>
+        <button id="clear-btn" class="secondary-btn">Clear</button>
+        <a href="#/settings" class="gear-btn" title="Settings — all comfort &amp; router parameters">⚙</a>
+      </div>
+    </header>
+
+    <p class="hint command-hint" id="time-hint">When you plan to leave</p>
+
+    <!-- Panels are SIBLINGS of #map, never children: as children every click on a
+         panel would also reach Leaflet and move the start/end marker. -->
+    <main class="map-stage">
+      <div id="map"></div>
+
+      <aside class="floating-panel panel-layers" id="layers-panel">
+        <div class="panel-head">
+          <h2>Layers</h2>
+          <button type="button" class="panel-collapse" data-panel="layers-panel">−</button>
+        </div>
+        <div class="panel-body">
+          <div id="layers-content"></div>
+          <section class="layer-group">
+            <h3 class="layer-group-title">Route colour</h3>
+            <div class="layer-row">
+              <select id="colour-by">
+                <option value="config">Colour by sail config</option>
+                <option value="tack">Colour by tack</option>
+              </select>
+              <p class="layer-description">What the leg colours mean.</p>
+            </div>
+          </section>
+          <section class="layer-group">
+            <h3 class="layer-group-title">Tile loading</h3>
+            <p id="tile-stats" class="tile-stats">Detail tiles loaded: 0</p>
+            <p class="hint">Detail tiles load automatically for the visible map area. The bar under the map shows which land source resolves at the cursor.</p>
+          </section>
         </div>
       </aside>
-    </div>
-  </main>
 
-  <footer>
-    <div class="warnings">
-      <strong>Important:</strong> This is a planning aid based on forecast data, not a real-time
-      navigation instruction. Forecasts can be wrong. Tidal streams are not modelled unless
-      you supply data. Always cross-check against your chart and pilot book before departure.
-    </div>
-    <div class="attribution">
-      Coastline data: Contains OpenStreetMap data &copy; OpenStreetMap contributors, ODbL.
-    </div>
-  </footer>
+      <aside class="floating-panel panel-trail" id="trail-panel">
+        <div class="panel-head">
+          <h2>Decision trail</h2>
+          <button type="button" class="panel-collapse" data-panel="trail-panel">−</button>
+        </div>
+        <div class="panel-body">
+          <div id="status-box" class="status-box hidden"></div>
+          <div id="passage-warnings" class="passage-warnings hidden"></div>
+          <div id="trail-content"></div>
+          <div id="debug-log" class="hidden">
+            <details>
+              <summary>Raw planner log</summary>
+              <pre id="debug-log-content"></pre>
+            </details>
+          </div>
+        </div>
+      </aside>
+
+      <div id="inspector" class="inspector-bar"></div>
+    </main>
+  </div>
+
+  <!-- SETTINGS VIEW -->
+  <div id="view-settings" class="view hidden">
+    <header class="settings-bar">
+      <a href="#" class="secondary-btn back-btn">← Back to map</a>
+      <h1>Settings</h1>
+      <p class="hint">Every number the planner uses, and what it actually does. Changes are saved automatically and survive a reload.</p>
+    </header>
+    <main id="settings-content" class="settings-page"></main>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="src/ui/app.js"></script>

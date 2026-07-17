@@ -3,3 +3,5 @@ serve.bat
 tiles/
 node_modules/
 tools/data/
+logs/
+.claude/

@@ -39,6 +39,24 @@ export function tileBounds(z, x, y) {
   };
 }
 
+export function selectTilesForBounds(bounds, zoom) {
+  const tileSet = new Set();
+  if (!bounds) return tileSet;
+
+  const x1 = lonToTileX(bounds.west, zoom);
+  const x2 = lonToTileX(bounds.east, zoom);
+  const y1 = latToTileY(bounds.north, zoom);
+  const y2 = latToTileY(bounds.south, zoom);
+
+  for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
+    for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
+      tileSet.add(tileKey(zoom, x, y));
+    }
+  }
+
+  return tileSet;
+}
+
 export function selectTilesForCorridor(routePoints, zoom, marginNm) {
   if (!routePoints || routePoints.length < 2) return new Set();
 

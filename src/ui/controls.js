@@ -1,6 +1,10 @@
-const MAX_TIDAL_INPUT_LENGTH = 2000;
+// The per-run inputs that live on the map view: where you're going, when, and
+// the route-only mode switch. Everything tunable lives on the settings page.
+
+import { toRoutingOpts } from './settings-store.js';
 
 export function getInputs() {
+  const routing = toRoutingOpts();
   return {
     startLat: parseFloat(document.getElementById('start-lat').value),
     startLon: parseFloat(document.getElementById('start-lon').value),
@@ -9,12 +13,10 @@ export function getInputs() {
     departureDate: document.getElementById('departure-date').value,
     departureTime: document.getElementById('departure-time').value,
     timeMode: document.querySelector('input[name="time-mode"]:checked').value,
-    timeStep: parseInt(document.getElementById('time-step').value, 10),
-    headingThreshold: parseInt(document.getElementById('heading-threshold').value, 10),
-    tidalEnabled: document.getElementById('enable-tides').checked,
-    tidalData: document.getElementById('tide-data').value,
     geometryMode: document.getElementById('geometry-mode').checked,
-    clearanceMargin: parseFloat(document.getElementById('clearance-margin').value) || 0
+    timeStep: routing.timeStep,
+    headingThreshold: routing.headingThreshold,
+    clearanceMargin: routing.clearanceMargin
   };
 }
 
@@ -28,41 +30,29 @@ export function setCoordinates(field, lat, lon) {
   }
 }
 
+export function clearCoordinates() {
+  for (const id of ['start-lat', 'start-lon', 'end-lat', 'end-lon']) {
+    document.getElementById(id).value = '';
+  }
+}
+
 export function validateInputs(inputs) {
   const errors = [];
 
   if (isNaN(inputs.startLat) || isNaN(inputs.startLon)) {
     errors.push('Start coordinates are required');
-  } else {
-    if (inputs.startLat < -90 || inputs.startLat > 90) {
-      errors.push('Start latitude must be between -90 and 90');
-    }
-    if (inputs.startLon < -180 || inputs.startLon > 180) {
-      errors.push('Start longitude must be between -180 and 180');
-    }
+  } else if (inputs.startLat < -90 || inputs.startLat > 90 || inputs.startLon < -180 || inputs.startLon > 180) {
+    errors.push('Start coordinates are out of range');
   }
 
   if (isNaN(inputs.endLat) || isNaN(inputs.endLon)) {
     errors.push('End coordinates are required');
-  } else {
-    if (inputs.endLat < -90 || inputs.endLat > 90) {
-      errors.push('End latitude must be between -90 and 90');
-    }
-    if (inputs.endLon < -180 || inputs.endLon > 180) {
-      errors.push('End longitude must be between -180 and 180');
-    }
+  } else if (inputs.endLat < -90 || inputs.endLat > 90 || inputs.endLon < -180 || inputs.endLon > 180) {
+    errors.push('End coordinates are out of range');
   }
 
   if (!inputs.departureDate || !inputs.departureTime) {
-    errors.push('Target date and time are required');
-  }
-
-  if (inputs.timeStep < 5 || inputs.timeStep > 60) {
-    errors.push('Time step must be between 5 and 60 minutes');
-  }
-
-  if (isNaN(inputs.headingThreshold) || inputs.headingThreshold < 5 || inputs.headingThreshold > 45) {
-    errors.push('Heading threshold must be between 5 and 45 degrees');
+    errors.push('Date and time are required');
   }
 
   return errors;
@@ -71,6 +61,7 @@ export function validateInputs(inputs) {
 export function setupTimeModeToggle() {
   const radios = document.querySelectorAll('input[name="time-mode"]');
   const hint = document.getElementById('time-hint');
+  if (!hint) return;
 
   const update = () => {
     const mode = document.querySelector('input[name="time-mode"]:checked').value;
@@ -83,36 +74,8 @@ export function setupTimeModeToggle() {
   update();
 }
 
-export function parseTidalData(text) {
-  if (!text.trim()) return null;
-
-  const truncated = text.slice(0, MAX_TIDAL_INPUT_LENGTH);
-  const lines = truncated.trim().split('\n');
-  const currents = [];
-
-  for (const line of lines) {
-    const parts = line.split(',').map(s => s.trim());
-    if (parts.length < 3) continue;
-
-    const dir = parseFloat(parts[1]);
-    const speed = parseFloat(parts[2]);
-
-    if (isNaN(dir) || isNaN(speed)) continue;
-
-    currents.push({
-      direction: dir,
-      speed: speed
-    });
-  }
-
-  return currents.length > 0 ? currents : null;
-}
-
-export function setupTideToggle() {
-  const checkbox = document.getElementById('enable-tides');
-  const tideInput = document.getElementById('tide-input');
-
-  checkbox.addEventListener('change', () => {
-    tideInput.classList.toggle('hidden', !checkbox.checked);
-  });
+export function setDefaultDateTime() {
+  const now = new Date();
+  document.getElementById('departure-date').value = now.toISOString().slice(0, 10);
+  document.getElementById('departure-time').value = now.toISOString().slice(11, 16);
 }

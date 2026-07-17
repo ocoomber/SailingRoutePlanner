@@ -2,7 +2,7 @@ import { calculateRoute } from './router.js';
 import { getPolarForConfig } from './sail-configs.js';
 
 async function runBlock(config, isLast, arriveByTime, fromPoint, fromTime, ctx) {
-  const { end, basePolars, windGrid, tidalData, params, opts, fineCoastline } = ctx;
+  const { end, basePolars, windGrid, tidalData, params, opts, fineCoastline, corridor } = ctx;
 
   const blockParams = {
     start: fromPoint, end,
@@ -18,7 +18,8 @@ async function runBlock(config, isLast, arriveByTime, fromPoint, fromTime, ctx) 
     tackPenaltyKn: params.tackPenaltyKn,
     allowIntoWind: config === 'motor',
     headingsPerStep: opts.headingsPerStep,
-    maxSteps: opts.maxSteps
+    maxSteps: opts.maxSteps,
+    corridor
   };
 
   if (!isLast) blockParams.arriveByTime = arriveByTime;
@@ -58,6 +59,8 @@ export async function executeBlocks(blocks, ctx) {
     if (!result.route || result.route.length === 0) break;
 
     for (const leg of result.route) leg.config = executedConfig;
+
+    const legStartIndex = legs.length;
     legs.push(...result.route);
     rawNodes.push(...(bi === 0 ? result.rawNodes : result.rawNodes.slice(1)));
     blockResults.push({ config: executedConfig, rawNodes: result.rawNodes });
@@ -69,6 +72,8 @@ export async function executeBlocks(blocks, ctx) {
       endTime: lastNode.time,
       startPoint: currentPoint,
       endPoint: lastNode.point,
+      legStartIndex,
+      legEndIndex: legs.length - 1,
       decision
     });
 

@@ -26,10 +26,21 @@ function lookaheadDurationMin(timeline, startIdx, ideal, params) {
   return minutes;
 }
 
+// The engine-on/engine-off pair forms a dead band: inside it the boat keeps
+// whatever it is already doing rather than flip-flopping in marginal air.
+// Below engineOnWindKn the polar has no data at all (lowest TWS step is 4kn),
+// so that edge is also where the boat genuinely stops sailing.
 function passesHysteresis(fromConfig, toConfig, step, params) {
   if (fromConfig === 'motor' && toConfig !== 'motor') {
     return step.windSpeed >= params.engineOffWindKn;
   }
+
+  if (fromConfig !== 'motor' && toConfig === 'motor') {
+    // Dropping sail for arrival is a standing practice, not a wind decision.
+    if (step.remainingMin <= params.finalApproachBufferMin) return true;
+    return step.windSpeed <= params.engineOnWindKn;
+  }
+
   return true;
 }
 
@@ -70,7 +81,11 @@ export function planConfigurations(timeline, params) {
 
     if (ideal === currentConfig) {
       lastEvaluatedIdeal = null;
-    } else if (ideal !== lastEvaluatedIdeal) {
+    } else {
+      // Re-evaluate on EVERY step: conditions keep moving (wind falling through
+      // the hysteresis band, a window growing), so a change refused once must
+      // still be able to pass later. lastEvaluatedIdeal only de-duplicates the
+      // rejection log — it must never gate the evaluation itself.
       const pos = pointOfSailFromTwa(approxTwaAbs(step));
       const windowMin = lookaheadDurationMin(timeline, i, ideal, params);
       const thresholdMin = changeDurationThresholdMin(currentConfig, ideal, pos, params);
@@ -85,7 +100,7 @@ export function planConfigurations(timeline, params) {
         currentConfig = ideal;
         lastEvaluatedIdeal = null;
       } else {
-        rejections.push(record);
+        if (ideal !== lastEvaluatedIdeal) rejections.push(record);
         lastEvaluatedIdeal = ideal;
       }
     }

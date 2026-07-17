@@ -1,35 +1,47 @@
+// Entry point: loads data and wires the pieces together.
+// Route running lives in passage-run.js, tile/inspector work in viewport.js.
+
 import { loadPolars } from '../core/polar.js';
 import { CoastlineManager } from '../data/coastline/index.js';
-import { calculateRoute } from '../core/router.js';
-import { planPassageForBrowser } from '../services/passage-service.js';
-import { initMap, setStart, setEnd, drawRoute, clearAll, clearChartingTools, drawLandOverlay, clearLandOverlay, drawSailingDebug, clearSailingDebug, drawCoarseOverlay, clearCoarseOverlay, drawTileGrid, clearTileGrid, drawTileStates, clearTileStates } from './map.js';
-import { getInputs, setCoordinates, validateInputs, parseTidalData, setupTideToggle, setupTimeModeToggle } from './controls.js';
-import { showResults, showError, hideResults, showLoading, hideLoading, showLog, hideLog } from './results.js';
 
-let polars = null;
-let coastlineManager = null;
+import { initMap, getViewportBounds, panToLeg, clearMarkers, clearChartingTools } from './map/map-core.js';
+import { initRegistry, registerLayer, applySelection, clearAllLayers } from './map/layer-registry.js';
+import { LAYER_DEFS } from './map/layer-defs.js';
+import { renderLayersPanel } from './layers-panel.js';
+import { showTrail, clearTrail, initTrailSync } from './trail-panel.js';
+import { subscribe, clearSelection } from './selection.js';
+import { setCoordinates, clearCoordinates, setupTimeModeToggle, setDefaultDateTime } from './controls.js';
+import { showError, hideError, hideLog, showWarnings } from './status.js';
+import { clearInspector } from './inspector.js';
+import { loadSettings } from './settings-store.js';
+import { renderSettings } from './settings-view.js';
+import { initViews } from './views.js';
+import { initPanels } from './panels.js';
+import { renderState, setPolars, setCoastlineManager, getCoastlineManager, redraw } from './app-state.js';
+import { onViewportChanged, onCursorMove } from './viewport.js';
+import { onCalculate } from './passage-run.js';
 
 async function loadData() {
   const calcBtn = document.getElementById('calculate-btn');
   calcBtn.disabled = true;
-  calcBtn.textContent = 'Loading data...';
+  calcBtn.textContent = 'Loading data…';
 
   try {
     const [polarsResp, coarseResp] = await Promise.all([
       fetch('src/data/polars/oceanis393.json'),
       fetch('src/data/coastline/sw-england-coarse.json')
     ]);
-
     if (!polarsResp.ok) throw new Error('Failed to load polar data');
     if (!coarseResp.ok) throw new Error('Failed to load coastline data');
 
-    const polarsJson = await polarsResp.json();
-    const coarseJson = await coarseResp.json();
+    setPolars(loadPolars(await polarsResp.json()));
 
-    polars = loadPolars(polarsJson);
+    const manager = new CoastlineManager();
+    await manager.init(await coarseResp.json());
+    setCoastlineManager(manager);
 
-    coastlineManager = new CoastlineManager();
-    await coastlineManager.init(coarseJson);
+    renderState.tileZoom = manager.tileZoom;
+    renderState.coastline = manager.getCoarseCoastline();
   } finally {
     calcBtn.disabled = false;
     calcBtn.textContent = 'Calculate Route';
@@ -40,191 +52,66 @@ function onPointSelected(field, lat, lon) {
   setCoordinates(field, lat, lon);
 }
 
-async function runGeometryMode(start, end, inputs) {
-  return calculateRoute({
-    start, end,
-    departureTime: new Date().toISOString(),
-    coastline: coastlineManager.getCoarseCoastline(),
-    timeStepMinutes: inputs.timeStep,
-    headingThreshold: inputs.headingThreshold,
-    constantSpeedKn: 6,
-    clearanceMarginNm: inputs.clearanceMargin
-  });
-}
-
-async function onCalculate() {
-  const inputs = getInputs();
-  const errors = validateInputs(inputs);
-
-  if (errors.length > 0) {
-    showError(errors.join('; '));
-    return;
-  }
-
-  if (!coastlineManager) {
-    showError('Data not loaded yet. Please wait a moment.');
-    return;
-  }
-
-  if (!inputs.geometryMode && !polars) {
-    showError('Polar data not loaded yet. Please wait a moment.');
-    return;
-  }
-
-  hideResults();
-  hideLog();
-  showLoading();
-
-  try {
-    const start = { lat: inputs.startLat, lon: inputs.startLon };
-    const end = { lat: inputs.endLat, lon: inputs.endLon };
-
-    const targetTime = new Date(`${inputs.departureDate}T${inputs.departureTime}:00Z`);
-    let departureTime = inputs.timeMode === 'departure'
-      ? targetTime
-      : new Date(targetTime.getTime() - 48 * 3600000);
-
-    let route, log, rawNodes;
-
-    if (inputs.geometryMode) {
-      const result = await runGeometryMode(start, end, inputs);
-      route = result.route;
-      log = result.log;
-      rawNodes = result.rawNodes;
-    } else {
-      const tidalCurrent = inputs.tidalEnabled ? parseTidalData(inputs.tidalData) : null;
-      const passageResult = await planPassageForBrowser({
-        start, end,
-        departureTime: departureTime.toISOString(),
-        basePolars: polars,
-        coastlineManager,
-        routerOpts: { timeStepMinutes: inputs.timeStep, headingThreshold: inputs.headingThreshold, clearanceMarginNm: inputs.clearanceMargin }
-      });
-      route = passageResult.legs;
-      log = passageResult.debug.log;
-      rawNodes = passageResult.debug.rawNodes;
-      if (tidalCurrent) log += '\n(Tidal current input ignored — position-aware tidal modelling not yet built)';
-    }
-
-    hideLoading();
-    showLog(log);
-
-    if (!route || route.length === 0) {
-      showError('Unable to find a route — check the coastline is passable between these points, or try increasing max steps in the debug options.');
-      return;
-    }
-
-    const totalTime = route.reduce((sum, l) => sum + l.duration, 0);
-    const computedDeparture = inputs.timeMode === 'arrival'
-      ? new Date(targetTime.getTime() - totalTime * 3600000)
-      : null;
-
-    drawRoute(route);
-    window.__lastRoute = route;
-    window.__lastRawNodes = rawNodes;
-    window.__coastlineManager = coastlineManager;
-    if (document.getElementById('show-sailing-debug').checked) {
-      drawSailingDebug(route);
-    }
-    showResults(route, totalTime, inputs.timeMode, computedDeparture, targetTime);
-    refreshDebugOverlays();
-  } catch (err) {
-    hideLoading();
-    showError(err.message);
-    console.error('Routing error:', err);
-  }
-}
-
-function refreshDebugOverlays() {
-  const showCoarse = document.getElementById('show-coarse-overlay');
-  if (showCoarse && showCoarse.checked && coastlineManager) {
-    drawCoarseOverlay(coastlineManager.getCoarseCoastline());
-  } else {
-    clearCoarseOverlay();
-  }
-
-  const showTileGrid = document.getElementById('show-tile-grid');
-  if (showTileGrid && showTileGrid.checked) {
-    const zoom = coastlineManager ? coastlineManager.tileZoom : 12;
-    drawTileGrid(zoom);
-  } else {
-    clearTileGrid();
-  }
-
-  const showTileStates = document.getElementById('show-tile-states');
-  if (showTileStates && showTileStates.checked && coastlineManager) {
-    drawTileStates(coastlineManager, coastlineManager.getTileStateMap());
-  } else {
-    clearTileStates();
-  }
-
-  const showLand = document.getElementById('show-land-overlay');
-  if (showLand && showLand.checked && coastlineManager) {
-    const smart = coastlineManager.getSmartCoastline();
-    drawLandOverlay(smart || coastlineManager.getCoarseCoastline());
-  } else {
-    clearLandOverlay();
-  }
-}
-
 function onClear() {
-  clearAll();
+  clearMarkers();
   clearChartingTools();
-  hideResults();
+  clearAllLayers();
+  clearTrail();
+  clearSelection();
+  hideError();
   hideLog();
-  window.__lastRoute = null;
-  window.__lastRawNodes = null;
-  window.__coastlineManager = null;
-  document.getElementById('start-lat').value = '';
-  document.getElementById('start-lon').value = '';
-  document.getElementById('end-lat').value = '';
-  document.getElementById('end-lon').value = '';
+  showWarnings(null);
+  clearCoordinates();
+  renderState.legs = null;
+  renderState.decisions = null;
+  showTrail([], [], null);
+  redraw();
+}
+
+// Pan only when the trail asked, so clicking a leg never yanks the map.
+function onSelectionChange(selection, origin) {
+  applySelection(selection);
+  if (origin === 'trail' && selection.selectedLegIndex !== null && renderState.legs) {
+    panToLeg(renderState.legs[selection.selectedLegIndex]);
+  }
 }
 
 async function init() {
-  initMap(onPointSelected);
-  setupTideToggle();
+  loadSettings();
+
+  const map = initMap(onPointSelected, { onViewportChanged, onCursorMove });
+  initRegistry(map);
+  for (const def of LAYER_DEFS) registerLayer(def);
+  renderLayersPanel(() => renderState);
+  clearInspector();
+
   setupTimeModeToggle();
+  setDefaultDateTime();
 
   document.getElementById('calculate-btn').addEventListener('click', onCalculate);
   document.getElementById('clear-btn').addEventListener('click', onClear);
 
-  document.getElementById('show-land-overlay').addEventListener('change', () => {
-    refreshDebugOverlays();
-  });
+  const colourBy = document.getElementById('colour-by');
+  if (colourBy) {
+    colourBy.addEventListener('change', () => {
+      renderState.colourBy = colourBy.value;
+      redraw();
+    });
+  }
 
-  document.getElementById('show-coarse-overlay').addEventListener('change', () => {
-    refreshDebugOverlays();
-  });
-
-  document.getElementById('show-tile-grid').addEventListener('change', () => {
-    refreshDebugOverlays();
-  });
-
-  document.getElementById('show-tile-states').addEventListener('change', () => {
-    refreshDebugOverlays();
-  });
-
-  document.getElementById('show-sailing-debug').addEventListener('change', (e) => {
-    if (e.target.checked) {
-      const route = window.__lastRoute;
-      if (route) drawSailingDebug(route);
-    } else {
-      clearSailingDebug();
-    }
-  });
-
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toISOString().slice(11, 16);
-  document.getElementById('departure-date').value = dateStr;
-  document.getElementById('departure-time').value = timeStr;
+  subscribe(onSelectionChange);
+  initTrailSync();
+  initPanels();
+  initViews({ onEnterSettings: renderSettings });
+  showTrail([], [], null);
 
   try {
     await loadData();
+    const bounds = getViewportBounds();
+    if (bounds) await onViewportChanged(bounds);
   } catch (err) {
     console.error('Failed to load data:', err);
-    showError('Failed to load application data. Check console for details.');
+    showError('Failed to load application data. Check the console for details.');
   }
 }
 

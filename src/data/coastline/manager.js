@@ -1,6 +1,6 @@
 import { loadCoastline } from '../../core/coastline.js';
 import { TileCache } from './tile-cache.js';
-import { pointToTile, tileKey, selectTilesForCorridor, DEFAULT_TILE_ZOOM } from './tile-selector.js';
+import { pointToTile, tileKey, selectTilesForCorridor, selectTilesForBounds, DEFAULT_TILE_ZOOM } from './tile-selector.js';
 import { SmartCoastline } from './smart-coastline.js';
 import { dedupeRings } from './dedupe-rings.js';
 
@@ -16,6 +16,8 @@ export class CoastlineManager {
     this._smartCoastline = null;
     this._tileZoom = DEFAULT_TILE_ZOOM;
     this._pendingFetches = new Map();
+    this._manifestKeys = null;
+    this._dataBbox = null;
   }
 
   get tileZoom() {
@@ -25,6 +27,20 @@ export class CoastlineManager {
   async init(coarseData) {
     this.coarseCoastline = loadCoastline(coarseData);
     await this._tileCache.open();
+    await this._loadManifest();
+  }
+
+  async _loadManifest() {
+    try {
+      const resp = await fetch(`${TILE_SERVER_BASE}/manifest.json`);
+      if (!resp.ok) return;
+      const manifest = await resp.json();
+      this._manifestKeys = new Set(manifest.tiles || []);
+      this._dataBbox = manifest.bbox || null;
+      if (typeof manifest.zoom === 'number') this._tileZoom = manifest.zoom;
+    } catch (err) {
+      console.warn('Tile manifest unavailable, falling back to lazy loading:', err);
+    }
   }
 
   getCoarseCoastline() {
@@ -38,6 +54,41 @@ export class CoastlineManager {
   async prepareFineTiles(routePoints, marginNm) {
     const tileKeys = selectTilesForCorridor(routePoints, this._tileZoom, marginNm);
     await this._loadTiles(tileKeys);
+  }
+
+  async prepareTilesForBounds(bounds) {
+    const candidateKeys = selectTilesForBounds(bounds, this._tileZoom);
+    const toLoad = new Set();
+    for (const key of candidateKeys) {
+      if (this._loadedTileKeys.has(key)) continue;
+      if (this._manifestKeys && !this._manifestKeys.has(key)) continue;
+      toLoad.add(key);
+    }
+    if (toLoad.size === 0) return 0;
+    await this._loadTiles(toLoad);
+    return toLoad.size;
+  }
+
+  getTileInfo(lat, lon) {
+    const { x, y, z } = pointToTile(lat, lon, this._tileZoom);
+    const key = tileKey(z, x, y);
+    const inRegion = this._inRegion(lat, lon);
+    const existsInManifest = this._manifestKeys ? this._manifestKeys.has(key) : null;
+    return { key, inRegion, existsInManifest, loaded: this._loadedTileKeys.has(key) };
+  }
+
+  _inRegion(lat, lon) {
+    if (!this._dataBbox) return null;
+    const b = this._dataBbox;
+    return lat <= b.north && lat >= b.south && lon <= b.east && lon >= b.west;
+  }
+
+  getLoadedTileCount() {
+    return this._loadedTileKeys.size;
+  }
+
+  getManifestTileCount() {
+    return this._manifestKeys ? this._manifestKeys.size : null;
   }
 
   async ensureTileForPoint(lat, lon) {
