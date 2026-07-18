@@ -230,7 +230,34 @@ export const SETTINGS_GROUPS = [
         step: 0.05,
         min: 0,
         max: 1,
-        description: 'Clearance used near the start and destination — leaving and entering port, marina or anchorage. This tool is a planning aid, not an autopilot: the skipper steers and judges clearance in pilotage waters, so keep this very low or 0. The boat still will not plan a course across land; it just hugs the shore as close as you allow while you con it in. The zone this applies to auto-sizes to at least the coastal clearance so you can always get clear of your own berth.'
+        description: 'Clearance used near the start and destination — leaving and entering port, marina or anchorage. This tool is a planning aid, not an autopilot: the skipper steers and judges clearance in pilotage waters, so keep this very low or 0. The boat still will not plan a course across land; it just hugs the shore as close as you allow while you con it in.'
+      },
+      {
+        path: 'harbourZoneNm',
+        label: 'Harbour / approach zone',
+        unit: 'NM',
+        step: 0.5,
+        min: 0.5,
+        max: 8,
+        description: 'How far from the start and destination the harbour clearance above applies, instead of the coastal clearance. Big enough to cover your pilotage water — a berth up an estuary can be a couple of miles from any real offing, so this needs to reach open water or the planner can\'t draw a course out (it will warn if so). Never smaller than the coastal clearance, so you can always leave your own berth.'
+      },
+      {
+        path: 'corridorWidthNm',
+        label: 'Corridor width',
+        unit: 'NM',
+        step: 0.5,
+        min: 0.5,
+        max: 10,
+        description: 'How far either side of the rough course the sailing route may wander to work the wind (tack a beat, dodge a header). Wider gives the router more room to find speed; narrower keeps it hugging the planned course and off mid-passage rivers. Sailing mode only — the rough course itself ignores it.'
+      },
+      {
+        path: 'headingsPerStep',
+        label: 'Heading resolution',
+        unit: 'dirs',
+        step: 4,
+        min: 8,
+        max: 72,
+        description: 'How many candidate headings the router tries at each step (36 = every 10°). More gives smoother, better-optimised courses but a slower search; fewer is faster and coarser. Sailing mode only.'
       }
     ]
   }
@@ -240,7 +267,10 @@ export const ROUTING_DEFAULTS = {
   timeStep: 15,
   headingThreshold: 15,
   clearanceMargin: 0.25,
-  harbourClearanceMargin: 0
+  harbourClearanceMargin: 0,
+  harbourZoneNm: 2,
+  corridorWidthNm: 3,
+  headingsPerStep: 36
 };
 
 export function allFields() {

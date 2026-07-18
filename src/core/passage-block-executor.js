@@ -15,6 +15,7 @@ async function runBlock(config, isLast, arriveByTime, fromPoint, fromTime, ctx) 
     tidalCurrent: tidalData,
     clearanceMarginNm: opts.clearanceMarginNm,
     harbourClearanceNm: opts.harbourClearanceNm,
+    harbourZoneNm: opts.harbourZoneNm,
     noGoAngleDeg: params.noGoAngleDeg,
     tackPenaltyKn: params.tackPenaltyKn,
     allowIntoWind: config === 'motor',

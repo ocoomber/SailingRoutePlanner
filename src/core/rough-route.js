@@ -22,8 +22,8 @@ const BBOX_MARGIN_DEG = 0.35;      // ~21NM of slack around the direct line
 const MAX_GRAPH_NODES = 300;       // bound on O(N^2) edge tests
 const OFFSET_NM_FACTOR = 2;        // push corners this * clearance into the water
 
-function segClear(coastline, a, b, start, end, clearanceNm, harbourClearanceNm) {
-  return !crossesLand(coastline, a, b, start, end, clearanceNm, harbourClearanceNm);
+function segClear(coastline, a, b, start, end, clearanceNm, harbourClearanceNm, harbourZoneNm) {
+  return !crossesLand(coastline, a, b, start, end, clearanceNm, harbourClearanceNm, harbourZoneNm);
 }
 
 function corridorBox(a, b) {
@@ -126,9 +126,9 @@ function dijkstra(nodes, adj, sIdx, eIdx) {
   return path;
 }
 
-export function computeRoughRoute(start, end, coastline, { clearanceNm = 0.25, harbourClearanceNm = 0 } = {}) {
+export function computeRoughRoute(start, end, coastline, { clearanceNm = 0.25, harbourClearanceNm = 0, harbourZoneNm = null } = {}) {
   // Fast path: open water needs no graph at all.
-  if (!coastline || segClear(coastline, start, end, start, end, clearanceNm, harbourClearanceNm)) {
+  if (!coastline || segClear(coastline, start, end, start, end, clearanceNm, harbourClearanceNm, harbourZoneNm)) {
     return {
       waypoints: [start, end], legCount: 1,
       totalDistanceNm: distanceNm(start, end),
@@ -140,7 +140,7 @@ export function computeRoughRoute(start, end, coastline, { clearanceNm = 0.25, h
   const adj = nodes.map(() => []);
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
-      if (segClear(coastline, nodes[i], nodes[j], start, end, clearanceNm, harbourClearanceNm)) {
+      if (segClear(coastline, nodes[i], nodes[j], start, end, clearanceNm, harbourClearanceNm, harbourZoneNm)) {
         const w = distanceNm(nodes[i], nodes[j]);
         adj[i].push({ to: j, w });
         adj[j].push({ to: i, w });
@@ -153,7 +153,7 @@ export function computeRoughRoute(start, end, coastline, { clearanceNm = 0.25, h
 
   const crossings = [];
   for (let i = 0; i < waypoints.length - 1; i++) {
-    if (crossesLand(coastline, waypoints[i], waypoints[i + 1], start, end, clearanceNm, harbourClearanceNm)) {
+    if (crossesLand(coastline, waypoints[i], waypoints[i + 1], start, end, clearanceNm, harbourClearanceNm, harbourZoneNm)) {
       crossings.push(i);
     }
   }

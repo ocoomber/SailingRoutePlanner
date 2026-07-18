@@ -30,7 +30,9 @@ export async function calculateRoute(params) {
   // Near port the coarse-mask exemption uses the same harbour zone crossesLand
   // relaxes the clearance over, so a berth the coarse polygon swallows (up an
   // estuary) stays reachable rather than being fenced off as "land".
-  const harbourZoneNm = defaultHarbourZoneNm(clearanceMarginNm || 0);
+  const harbourZoneNm = params.harbourZoneNm != null
+    ? params.harbourZoneNm
+    : defaultHarbourZoneNm(clearanceMarginNm || 0);
 
   const timeStepHours = timeStepMinutes / 60;
   const totalDist = distanceNm(start, end);
@@ -102,7 +104,7 @@ export async function calculateRoute(params) {
         }
         if (arrSpeed > 0 && distDirect <= arrSpeed * timeStepHours &&
             (!corridor || withinCorridor(end, corridor)) &&
-            !crossesLand(coastline, node.point, end, start, end, clearanceMarginNm, harbourClearanceNm)) {
+            !crossesLand(coastline, node.point, end, start, end, clearanceMarginNm, harbourClearanceNm, harbourZoneNm)) {
           const arrTime = addHours(node.time, distDirect / arrSpeed);
           if (!arrivalNode || new Date(arrTime) < new Date(arrivalNode.time)) {
             arrivalNode = {
@@ -168,7 +170,7 @@ export async function calculateRoute(params) {
           continue;
         }
 
-        if (crossesLand(coastline, node.point, newPoint, start, end, clearanceMarginNm, harbourClearanceNm)) {
+        if (crossesLand(coastline, node.point, newPoint, start, end, clearanceMarginNm, harbourClearanceNm, harbourZoneNm)) {
           landBlocked++;
           if (step < 3) {
             log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);
@@ -270,7 +272,7 @@ export async function calculateRoute(params) {
       let finalNode = closest;
       const distToDest = distanceNm(closest.point, end);
       if (distToDest > 0.05) {
-        if (!crossesLand(coastline, closest.point, end, start, end, clearanceMarginNm, harbourClearanceNm)) {
+        if (!crossesLand(coastline, closest.point, end, start, end, clearanceMarginNm, harbourClearanceNm, harbourZoneNm)) {
           const sog = closest.sog || constantSpeedKn || 0;
           const hdg = bearing(closest.point, end);
           const duration = sog > 0 ? distToDest / sog : 0;
