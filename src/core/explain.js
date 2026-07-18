@@ -135,6 +135,9 @@ export function formatTransition(transition) {
 }
 
 export function formatInitial(initial) {
+  if (initial.motoring) {
+    return `Under engine from departure — steering the direct bearing to the destination. Bearing ${initial.bearing}°, heading ${initial.heading}°.`;
+  }
   return `Initial heading set from wind and bearing to destination at departure. Wind ${initial.windSpeed}kn from ${initial.windDir}\u00B0, bearing ${initial.bearing}\u00B0 — optimal course ${initial.heading}\u00B0 on ${initial.tackSide || '?'} tack (${initial.pointOfSail}).`;
 }
 

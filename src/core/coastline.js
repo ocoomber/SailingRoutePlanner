@@ -102,30 +102,24 @@ function nearestNm(point, grid) {
   return min;
 }
 
+// Walk the WHOLE segment, collecting every grid cell it passes through and
+// testing each once. Rough-route edges run 5-15 NM; checking only the cells near
+// the endpoints and one midpoint (the old behaviour) left long middle sections
+// unexamined, so an edge could cross land in a cell nobody looked at.
 function segsCross(grid, a, b) {
   const checked = new Set();
-  for (const key of nearCells(a)) {
-    if (checked.has(key)) continue;
-    checked.add(key);
-    const segs = grid[key];
-    if (!segs) continue;
-    for (const seg of segs) {
-      if (segmentsCross(a, b, seg[0], seg[1])) return true;
-    }
-  }
-  for (const key of nearCells(b)) {
-    if (checked.has(key)) continue;
-    const segs = grid[key];
-    if (!segs) continue;
-    for (const seg of segs) {
-      if (segmentsCross(a, b, seg[0], seg[1])) return true;
-    }
-  }
-  const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
-  const key = (Math.floor(mid.lon / CELL_SIZE) * CELL_SIZE).toFixed(3) + ',' + (Math.floor(mid.lat / CELL_SIZE) * CELL_SIZE).toFixed(3);
-  if (!checked.has(key)) {
-    const segs = grid[key];
-    if (segs) {
+  const dLat = b.lat - a.lat, dLon = b.lon - a.lon;
+  const span = Math.max(Math.abs(dLat), Math.abs(dLon));
+  const nSteps = Math.max(1, Math.ceil(span / (CELL_SIZE / 2)));
+
+  for (let i = 0; i <= nSteps; i++) {
+    const t = i / nSteps;
+    const p = { lat: a.lat + dLat * t, lon: a.lon + dLon * t };
+    for (const key of nearCells(p)) {
+      if (checked.has(key)) continue;
+      checked.add(key);
+      const segs = grid[key];
+      if (!segs) continue;
       for (const seg of segs) {
         if (segmentsCross(a, b, seg[0], seg[1])) return true;
       }
@@ -175,50 +169,91 @@ function landContains(coastline, point) {
 
 const SAFE_DIST_NM = 1;
 const BROAD_DIST_NM = 1;
-// Near the start/end the clearance margin is waived so the boat can leave and
-// enter a harbour (the actual land-crossing tests still apply, so it can't cut
-// through land — it just gets to hug the berth). Coastal passages always begin
-// and end near land, so this exemption must exist. It is applied for BOTH ends
-// during the search (router.js passes start and end).
+// How far off the berth the *actual land* tests (segment crossing, containment)
+// are forgiven — just enough to leave a slip the coarse polygon overhangs. This
+// is a run-aground concern, NOT a pilotage one, so it stays small and fixed. The
+// separate harbour clearance zone below governs how close to shore the route
+// PLANS near port, which the skipper controls.
 const ENDPOINT_CLEARANCE_EXEMPT_NM = 0.5;
 
-export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm = 0) {
+// The clearance margin is relaxed to `harbourClearanceNm` within this radius of
+// the start/end — the pilotage water where the skipper cons the boat and the
+// open-water margin can't apply (a berth up an estuary is closer to shore than
+// any coastal margin for miles). Defaults to at least the coastal clearance so a
+// berth can always be left, but the caller sets it to cover its actual approach.
+const DEFAULT_HARBOUR_ZONE_NM = 2;
+export function defaultHarbourZoneNm(clearanceMarginNm) {
+  // Cover the approaches even when the coastal margin is wide: a berth up an
+  // estuary can be a couple of miles from water that holds a big offing.
+  return Math.max(DEFAULT_HARBOUR_ZONE_NM, clearanceMarginNm * 2);
+}
+
+export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm = 0, harbourClearanceNm = 0, harbourZoneNmParam = null) {
   const dA = nearestNm(a, coastline.grid);
   const dB = nearestNm(b, coastline.grid);
 
+  const legDist = distanceNm(a, b);
+
   if (segsCross(coastline.grid, a, b)) {
-    if (startPt && nearestNm(startPt, coastline.grid) < SAFE_DIST_NM && distanceNm(startPt, a) < 1) {
-      if (landContains(coastline, b)) return true;
-    } else if (endPt && nearestNm(endPt, coastline.grid) < SAFE_DIST_NM && distanceNm(endPt, b) < 1) {
-      if (landContains(coastline, b) && dB > SAFE_DIST_NM) return true;
-    } else {
-      return true;
+    // The exemption is ONLY a berth-exit/entry hop: forgive a crossing that lies
+    // within ENDPOINT_CLEARANCE_EXEMPT_NM of an exempted endpoint, never one in
+    // the body of the segment. Trim that stub off each exempted end and re-test —
+    // a crossing that survives the trim is real land, not the berth.
+    const exemptA = startPt && nearestNm(startPt, coastline.grid) < SAFE_DIST_NM && distanceNm(startPt, a) < 1;
+    const exemptB = endPt && nearestNm(endPt, coastline.grid) < SAFE_DIST_NM && distanceNm(endPt, b) < 1;
+
+    if (!exemptA && !exemptB) return true;
+
+    const tA = exemptA && legDist > 0 ? Math.min(ENDPOINT_CLEARANCE_EXEMPT_NM / legDist, 1) : 0;
+    const tB = exemptB && legDist > 0 ? Math.min(ENDPOINT_CLEARANCE_EXEMPT_NM / legDist, 1) : 0;
+    // tA + tB >= 1 means the trim consumes the whole segment: a pure berth hop.
+    if (tA + tB < 1) {
+      const a2 = tA > 0 ? interpolatePoint(a, b, tA) : a;
+      const b2 = tB > 0 ? interpolatePoint(a, b, 1 - tB) : b;
+      if (segsCross(coastline.grid, a2, b2)) return true;
     }
+    // The far endpoint sitting inside land is never a berth hop.
+    if (exemptA && landContains(coastline, b)) return true;
+    if (exemptB && landContains(coastline, b) && dB > SAFE_DIST_NM) return true;
   }
 
   if (dA > BROAD_DIST_NM && landContains(coastline, a)) return true;
   if (dB > BROAD_DIST_NM && landContains(coastline, b)) return true;
 
-  const legDist = distanceNm(a, b);
-  if (legDist > 2) {
-    const steps = Math.ceil(legDist / 2);
+  // Sample the interior for containment so a narrow neck (like the Lizard, which
+  // is < 1 NM from coast everywhere) can't slip between samples. No nearest-coast
+  // guard: ring-grid containment is cheap and the guard used to skip exactly the
+  // narrow necks we need to catch. Points within the berth exemption are skipped.
+  if (legDist > 1) {
+    const steps = Math.ceil(legDist);
     for (let i = 1; i < steps; i++) {
       const mid = interpolatePoint(a, b, i / steps);
-      if (nearestNm(mid, coastline.grid) > BROAD_DIST_NM && landContains(coastline, mid)) return true;
+      if (startPt && distanceNm(mid, startPt) < ENDPOINT_CLEARANCE_EXEMPT_NM) continue;
+      if (endPt && distanceNm(mid, endPt) < ENDPOINT_CLEARANCE_EXEMPT_NM) continue;
+      if (landContains(coastline, mid)) return true;
     }
   }
 
-  if (clearanceMarginNm > 0) {
-    const stepSize = Math.min(clearanceMarginNm / 2, 0.5);
+  // Clearance-margin test. This is pilotage, not run-aground: the actual land
+  // tests above already stop the boat crossing land. Near port (within the
+  // harbour zone of start/end) a separate, usually much smaller clearance applies
+  // — the skipper cons the boat in and out, so the open-water margin must not
+  // fence it against its own berth. Everywhere else the full coastal margin holds.
+  if (clearanceMarginNm > 0 || harbourClearanceNm > 0) {
+    const zone = harbourZoneNmParam != null ? harbourZoneNmParam : defaultHarbourZoneNm(clearanceMarginNm);
+    const positiveClrs = [clearanceMarginNm, harbourClearanceNm].filter(c => c > 0);
+    const stepSize = Math.min(Math.min(...positiveClrs) / 2, 0.5);
     const nSteps = Math.max(1, Math.ceil(legDist / stepSize));
 
     for (let i = 0; i <= nSteps; i++) {
       const pt = i === 0 ? a : i === nSteps ? b : interpolatePoint(a, b, i / nSteps);
 
-      if (startPt && distanceNm(pt, startPt) < ENDPOINT_CLEARANCE_EXEMPT_NM) continue;
-      if (endPt && distanceNm(pt, endPt) < ENDPOINT_CLEARANCE_EXEMPT_NM) continue;
+      const nearHarbour =
+        (startPt && distanceNm(pt, startPt) < zone) ||
+        (endPt && distanceNm(pt, endPt) < zone);
+      const eff = nearHarbour ? harbourClearanceNm : clearanceMarginNm;
 
-      if (nearestNm(pt, coastline.grid) < clearanceMarginNm) return true;
+      if (eff > 0 && nearestNm(pt, coastline.grid) < eff) return true;
     }
   }
 

@@ -221,7 +221,16 @@ export const SETTINGS_GROUPS = [
         step: 0.05,
         min: 0,
         max: 2,
-        description: 'How far offshore the route stays out at sea. Near the start and end this is automatically waived so you can leave and enter a harbour (roughly 500m of the berth is exempt). 0 disables it entirely. If a harbour entrance is too tight, the planner retries with smaller margins before giving up.'
+        description: 'How far offshore the route stays out at sea in open water. Near the start and destination it eases to the "Harbour clearance" below, since you con the boat in and out of port yourself. 0 disables the offshore margin (the route still won\'t cross land).'
+      },
+      {
+        path: 'harbourClearanceMargin',
+        label: 'Harbour / approach clearance',
+        unit: 'NM',
+        step: 0.05,
+        min: 0,
+        max: 1,
+        description: 'Clearance used near the start and destination — leaving and entering port, marina or anchorage. This tool is a planning aid, not an autopilot: the skipper steers and judges clearance in pilotage waters, so keep this very low or 0. The boat still will not plan a course across land; it just hugs the shore as close as you allow while you con it in. The zone this applies to auto-sizes to at least the coastal clearance so you can always get clear of your own berth.'
       }
     ]
   }
@@ -230,7 +239,8 @@ export const SETTINGS_GROUPS = [
 export const ROUTING_DEFAULTS = {
   timeStep: 15,
   headingThreshold: 15,
-  clearanceMargin: 0.25
+  clearanceMargin: 0.25,
+  harbourClearanceMargin: 0
 };
 
 export function allFields() {

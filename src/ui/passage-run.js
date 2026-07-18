@@ -18,10 +18,23 @@ import { toComfortParams, toRoutingOpts } from './settings-store.js';
 // land, with no wind or sail logic applied. Computed against the coarse
 // coastline (which fills rivers in), so it never wanders up a dead end.
 function runGeometryMode(start, end, inputs) {
+  // Full coastal clearance in open water; the harbour clearance (usually 0)
+  // applies near the start/finish, where the skipper cons the boat in and out.
+  // The harbour zone auto-sizes to at least the coastal clearance, so a near-shore
+  // start can always get clear — no need to relax the open-water margin.
   const rough = computeRoughRoute(start, end, getCoastlineManager().getCoarseCoastline(), {
-    clearanceNm: inputs.clearanceMargin
+    clearanceNm: inputs.clearanceMargin,
+    harbourClearanceNm: inputs.harbourClearanceMargin
   });
-  return { rough, legs: roughRouteToLegs(rough.waypoints) };
+
+  const warnings = [];
+  if (!rough.reachedCleanly) {
+    warnings.push(
+      `Could not draw a course clear of land at ${inputs.clearanceMargin}NM coastal clearance — the straight line shown crosses land. Check the start and end are in open water, or lower the coastal/harbour clearance.`
+    );
+  }
+
+  return { rough, legs: roughRouteToLegs(rough.waypoints), warnings };
 }
 
 function departureFor(inputs) {
@@ -71,6 +84,7 @@ export async function onCalculate() {
       const result = runGeometryMode(start, end, inputs);
       legs = result.legs;
       rough = result.rough;
+      warnings = result.warnings;
     } else {
       passage = await planPassageForBrowser({
         start, end,
@@ -81,7 +95,8 @@ export async function onCalculate() {
         routerOpts: {
           timeStepMinutes: inputs.timeStep,
           headingThreshold: inputs.headingThreshold,
-          clearanceMarginNm: inputs.clearanceMargin
+          clearanceMarginNm: inputs.clearanceMargin,
+          harbourClearanceNm: inputs.harbourClearanceMargin
         }
       });
       legs = passage.legs;
