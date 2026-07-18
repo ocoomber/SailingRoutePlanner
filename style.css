@@ -463,30 +463,68 @@ body {
   .panel-trail { width: 19rem; }
 }
 
-/* ---------- phones: panels as chips, one drawer at a time ---------- */
+/* ---------- edge tabs + backdrop (mobile drawers) ---------- */
+/* Hidden on desktop; the phone media query below turns them on. */
+.panel-fab { display: none; }
+.panel-backdrop { display: none; }
+
+/* ---------- phones: panels slide in from their edge ---------- */
 @media (max-width: 640px) {
-  /* Collapsed: compact chips stacked top-left, clear of the map's zoom control
-     (top-left) and charting tools (top-right). Tap one to open it. */
-  .floating-panel.collapsed {
-    width: auto;
-    right: auto;
-    max-width: calc(100vw - 3.5rem);
+  /* Off-canvas drawers: pinned full height to their own edge, slid out of view
+     until opened. Only one carries .open at a time (see panels.js). */
+  .floating-panel {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: min(86vw, 21rem);
+    max-height: none;
+    border-radius: 0;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.3);
+    transition: transform 0.25s ease;
+    z-index: 1200;
   }
-  .panel-layers.collapsed { left: 3rem; top: 0.5rem; }
-  .panel-trail.collapsed  { left: 3rem; top: 3rem; }
+  .panel-layers { left: 0; right: auto; transform: translateX(-100%); }
+  .panel-trail  { right: 0; left: auto; transform: translateX(100%); }
+  .panel-layers.open,
+  .panel-trail.open { transform: translateX(0); }
 
-  /* Open: a drawer sized to the viewport, over the map. Only one is open at a
-     time (see panels.js), so it never fights the other. */
-  .floating-panel:not(.collapsed) {
-    left: 0.5rem;
-    right: 0.5rem;
-    width: auto;
-    max-height: 72vh;
+  /* Drawers always show their body on a phone (ignore any desktop .collapsed). */
+  .floating-panel .panel-body { display: block !important; }
+  .panel-body { -webkit-overflow-scrolling: touch; }
+
+  /* The − button reads as a close control here; bigger tap target. */
+  .panel-head { padding: 0.6rem 0.8rem; }
+  .panel-collapse { font-size: 1.4rem; padding: 0 0.5rem; }
+
+  /* Edge tabs: vertical labels protruding from each side, clear of the map's
+     zoom (top-left) and charting (top-right) controls. */
+  .panel-fab {
+    display: inline-block;
+    position: fixed;
+    top: 42%;
+    z-index: 1201;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 0.75rem 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
+  .fab-layers { left: 0; border-radius: 0 var(--radius) var(--radius) 0; }
+  .fab-trail  { right: 0; border-radius: var(--radius) 0 0 var(--radius); }
 
-  /* Bigger tap targets for the chip header. */
-  .panel-head { padding: 0.55rem 0.75rem; }
-  .panel-collapse { font-size: 1.25rem; padding: 0 0.5rem; }
+  .panel-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 1150;
+  }
+  .panel-backdrop.visible { display: block; }
 
   /* The debug coordinate bar is desktop-hover furniture; hide it on touch so it
      doesn't eat the bottom of the map. */
