@@ -462,3 +462,33 @@ body {
   .panel-layers { width: 15rem; }
   .panel-trail { width: 19rem; }
 }
+
+/* ---------- phones: panels as chips, one drawer at a time ---------- */
+@media (max-width: 640px) {
+  /* Collapsed: compact chips stacked top-left, clear of the map's zoom control
+     (top-left) and charting tools (top-right). Tap one to open it. */
+  .floating-panel.collapsed {
+    width: auto;
+    right: auto;
+    max-width: calc(100vw - 3.5rem);
+  }
+  .panel-layers.collapsed { left: 3rem; top: 0.5rem; }
+  .panel-trail.collapsed  { left: 3rem; top: 3rem; }
+
+  /* Open: a drawer sized to the viewport, over the map. Only one is open at a
+     time (see panels.js), so it never fights the other. */
+  .floating-panel:not(.collapsed) {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-height: 72vh;
+  }
+
+  /* Bigger tap targets for the chip header. */
+  .panel-head { padding: 0.55rem 0.75rem; }
+  .panel-collapse { font-size: 1.25rem; padding: 0 0.5rem; }
+
+  /* The debug coordinate bar is desktop-hover furniture; hide it on touch so it
+     doesn't eat the bottom of the map. */
+  .inspector-bar { display: none; }
+}
