@@ -107,6 +107,7 @@ export function toRoutingOpts() {
   return {
     timeStep: getValue('timeStep'),
     headingThreshold: getValue('headingThreshold'),
-    clearanceMargin: getValue('clearanceMargin')
+    clearanceMargin: getValue('clearanceMargin'),
+    harbourClearanceMargin: getValue('harbourClearanceMargin')
   };
 }

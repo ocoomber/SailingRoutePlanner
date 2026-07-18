@@ -16,7 +16,8 @@ export function getInputs() {
     geometryMode: document.getElementById('geometry-mode').checked,
     timeStep: routing.timeStep,
     headingThreshold: routing.headingThreshold,
-    clearanceMargin: routing.clearanceMargin
+    clearanceMargin: routing.clearanceMargin,
+    harbourClearanceMargin: routing.harbourClearanceMargin
   };
 }
 

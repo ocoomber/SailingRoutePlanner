@@ -1,8 +1,9 @@
 import { distanceNm, bearing, destination, addVectors } from './geometry.js';
 import { lookupSpeed, findNoGoAngle } from './polar.js';
 import { crossesLand } from '../data/coastline/index.js';
+import { inAnyPolygon, defaultHarbourZoneNm } from './coastline.js';
 import { interpolateWind } from './wind-interpolation.js';
-import { withinCorridor } from './route-corridor.js';
+import { withinCorridor, distanceToGoAlongRoute } from './route-corridor.js';
 
 const DEFAULT_HEADINGS = 36;
 const MAX_ISOCHRONE_SIZE = 200;
@@ -21,10 +22,15 @@ export async function calculateRoute(params) {
     start, end, departureTime, coastline,
     timeStepMinutes, headingThreshold, tidalCurrent,
     polars, windGrid,
-    constantSpeedKn, clearanceMarginNm, noGoAngleDeg,
+    constantSpeedKn, clearanceMarginNm, harbourClearanceNm = 0, noGoAngleDeg,
     arriveByTime, allowIntoWind, tackPenaltyKn = 0,
-    corridor = null
+    corridor = null, coarseCoastline = null
   } = params;
+
+  // Near port the coarse-mask exemption uses the same harbour zone crossesLand
+  // relaxes the clearance over, so a berth the coarse polygon swallows (up an
+  // estuary) stays reachable rather than being fenced off as "land".
+  const harbourZoneNm = defaultHarbourZoneNm(clearanceMarginNm || 0);
 
   const timeStepHours = timeStepMinutes / 60;
   const totalDist = distanceNm(start, end);
@@ -58,6 +64,7 @@ export async function calculateRoute(params) {
   for (let step = 0; step < maxSteps; step++) {
     const nextIsochrone = [];
     const bestRejectedByNode = new Map();
+    let arrivalNode = null;
 
     const nHeadings = params.headingsPerStep || DEFAULT_HEADINGS;
     const headingStep = 360 / nHeadings;
@@ -74,6 +81,38 @@ export async function calculateRoute(params) {
       const nodeNoGo = (constantSpeedKn || allowIntoWind)
         ? 0
         : (noGoAngleDeg ?? findNoGoAngle(polars, nodeWind.speed));
+
+      // Direct-arrival shortcut: if this node can reach the destination within
+      // one time step on a clear, in-corridor bearing, sail straight there with a
+      // fractional-duration leg instead of stepping past it and dithering back
+      // (the arrival "dance" the fixed step size otherwise produces). Keep the
+      // earliest arrival across the isochrone. Tidal set is ignored here, exactly
+      // as it is in the exact-final-leg append below.
+      {
+        const distDirect = distanceNm(node.point, end);
+        let arrSpeed, arrTwa = 0, arrWindSpd = 0, arrWindDir = 0;
+        if (constantSpeedKn) {
+          arrSpeed = constantSpeedKn;
+        } else {
+          arrWindDir = nodeWind.direction;
+          arrWindSpd = nodeWind.speed;
+          const raw = brgToEnd - nodeWind.direction;
+          arrTwa = ((raw % 360) + 540) % 360 - 180;
+          arrSpeed = Math.abs(arrTwa) < nodeNoGo ? 0 : lookupSpeed(polars, Math.abs(arrTwa), nodeWind.speed);
+        }
+        if (arrSpeed > 0 && distDirect <= arrSpeed * timeStepHours &&
+            (!corridor || withinCorridor(end, corridor)) &&
+            !crossesLand(coastline, node.point, end, start, end, clearanceMarginNm, harbourClearanceNm)) {
+          const arrTime = addHours(node.time, distDirect / arrSpeed);
+          if (!arrivalNode || new Date(arrTime) < new Date(arrivalNode.time)) {
+            arrivalNode = {
+              point: { ...end }, heading: brgToEnd, parent: node,
+              time: arrTime, distToEnd: 0, sog: arrSpeed,
+              twa: arrTwa, windSpeed: arrWindSpd, windDir: arrWindDir
+            };
+          }
+        }
+      }
 
       for (let h = 0; h < 360; h += headingStep) {
         let boatSpeed;
@@ -116,7 +155,20 @@ export async function calculateRoute(params) {
           continue;
         }
 
-        if (crossesLand(coastline, node.point, newPoint, start, end, clearanceMarginNm)) {
+        // The coarse coastline fills rivers in as land, so it is the truth about
+        // where a passage MAY go (the fine tiles only say where the water's edge
+        // is). Reject any candidate inside a coarse land polygon — this makes it
+        // structurally impossible to sail up a river regardless of corridor width
+        // — but forgive a berth the coarse polygon swallows near start/end.
+        if (coarseCoastline &&
+            inAnyPolygon(newPoint, coarseCoastline.outerRings, coarseCoastline.outerRingBboxes,
+              coarseCoastline.outerRingGrid, coarseCoastline.outerRingGlobalRings) &&
+            distanceNm(newPoint, start) > harbourZoneNm &&
+            distanceNm(newPoint, end) > harbourZoneNm) {
+          continue;
+        }
+
+        if (crossesLand(coastline, node.point, newPoint, start, end, clearanceMarginNm, harbourClearanceNm)) {
           landBlocked++;
           if (step < 3) {
             log.push(`[Step ${step}] LAND BLOCKED: ${node.point.lat.toFixed(4)},${node.point.lon.toFixed(4)} → ${newPoint.lat.toFixed(4)},${newPoint.lon.toFixed(4)} hdg ${Math.round(h)}°`);
@@ -135,7 +187,12 @@ export async function calculateRoute(params) {
           Math.sign(node.twa) !== Math.sign(twaVal);
         const maneuverPenalty = (node.maneuverPenalty || 0) +
           (maneuvered ? tackPenaltyKn * timeStepHours : 0);
-        const cost = distToEnd + maneuverPenalty;
+        // Cost = progress left along the rough course, not straight-line to the
+        // end. Rounding a headland increases straight-line distance to the end,
+        // which traps the isochrone in a local minimum; distance-to-go along the
+        // course keeps shrinking, so the boat follows the course round instead.
+        const progressToGo = corridor ? distanceToGoAlongRoute(newPoint, corridor) : distToEnd;
+        const cost = progressToGo + maneuverPenalty;
 
         nextIsochrone.push({
           point: newPoint,
@@ -151,6 +208,16 @@ export async function calculateRoute(params) {
           windDir: windDirVal
         });
       }
+    }
+
+    if (arrivalNode) {
+      log.push(`[Step ${step}] ARRIVED — direct final leg ${distanceNm(arrivalNode.parent.point, end).toFixed(2)}NM at ${Math.round(arrivalNode.heading)}°T (fractional duration)`);
+      log.push(`---`);
+      log.push(`Stats: ${landBlocked} moves blocked by land, ${zeroSpeed} moves blocked by zero speed`);
+      const rawNodes = collectRawNodes(arrivalNode);
+      const route = buildRoute(arrivalNode, history, headingThreshold);
+      log.push(`Legs: ${route.length}`);
+      return { route, rawNodes, log: log.join('\n'), reachedEnd: true };
     }
 
     if (nextIsochrone.length === 0) {
@@ -203,7 +270,7 @@ export async function calculateRoute(params) {
       let finalNode = closest;
       const distToDest = distanceNm(closest.point, end);
       if (distToDest > 0.05) {
-        if (!crossesLand(coastline, closest.point, end, start, end, clearanceMarginNm)) {
+        if (!crossesLand(coastline, closest.point, end, start, end, clearanceMarginNm, harbourClearanceNm)) {
           const sog = closest.sog || constantSpeedKn || 0;
           const hdg = bearing(closest.point, end);
           const duration = sog > 0 ? distToDest / sog : 0;

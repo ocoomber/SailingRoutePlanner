@@ -27,7 +27,11 @@ const DEFAULT_ROUTER_OPTS = {
   headingThreshold: 15,
   headingsPerStep: 36,
   maxSteps: 500,
-  clearanceMarginNm: 0.25
+  clearanceMarginNm: 0.25,
+  // Clearance near the start/destination, where the skipper cons the boat in and
+  // out of port. Default 0: don't plan any offshore margin there — just don't
+  // cross land. The coastal margin above still holds in open water.
+  harbourClearanceNm: 0
 };
 
 export async function planPassage(input) {
@@ -44,12 +48,13 @@ export async function planPassage(input) {
   // Pass 1 — the rough course: a taut geometric string around the coarse land,
   // which fills rivers in, so it never heads up a dead end. Relax the clearance
   // only if the course can't be drawn at the requested margin (a tight harbour).
+  const harbourClearanceNm = opts.harbourClearanceNm ?? 0;
   let effectiveClearanceNm = requestedClearanceNm;
-  let rough = computeRoughRoute(start, end, coastlineCoarse, { clearanceNm: effectiveClearanceNm });
+  let rough = computeRoughRoute(start, end, coastlineCoarse, { clearanceNm: effectiveClearanceNm, harbourClearanceNm });
   for (const fallback of NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM) {
     if (rough.reachedCleanly || fallback >= effectiveClearanceNm) continue;
     effectiveClearanceNm = fallback;
-    rough = computeRoughRoute(start, end, coastlineCoarse, { clearanceNm: effectiveClearanceNm });
+    rough = computeRoughRoute(start, end, coastlineCoarse, { clearanceNm: effectiveClearanceNm, harbourClearanceNm });
     if (rough.reachedCleanly) break;
   }
 
@@ -91,7 +96,8 @@ export async function planPassage(input) {
   // Pass 2b — sail each config block for real, constrained to the corridor.
   const execution = await executeBlocks(blocks, {
     start, end, departureTime, basePolars, windGrid, tidalData, params,
-    opts: fineOpts, fineCoastline: finePruned, corridor
+    opts: fineOpts, fineCoastline: finePruned, corridor,
+    coarseCoastline: coastlineCoarse
   });
 
   const combinedLog = execution.logs.join('\n---\n');

@@ -21,6 +21,10 @@ function fmtDelta(d) {
   return `${sign}${Math.round(d)}\u00B0`;
 }
 
+function motorPointOfSail(leg) {
+  return leg.config === 'motor' ? 'under engine' : pointOfSailCategory(leg.windAngle);
+}
+
 export function classifyTransition(prevLeg, nextLeg, destination) {
   const prevBearing = bearing(prevLeg.waypoint, destination);
   const nextBearing = bearing(nextLeg.waypoint, destination);
@@ -28,6 +32,23 @@ export function classifyTransition(prevLeg, nextLeg, destination) {
   const dWindDir = deltaDeg(prevLeg.windDir, nextLeg.windDir);
   const dWindSpeed = nextLeg.windSpeed - prevLeg.windSpeed;
   const dBearing = deltaDeg(prevBearing, nextBearing);
+
+  // Under engine the boat steers a bearing, not a wind angle. Explain any heading
+  // change as tracking the shifting bearing to the destination, never as holding
+  // a point of sail.
+  if (nextLeg.config === 'motor') {
+    const statLine = `Wind: ${prevLeg.windDir}°→${nextLeg.windDir}° (${fmtDelta(dWindDir)}) · Heading: ${prevLeg.heading}°→${nextLeg.heading}° (${fmtDelta(dHeading)})`;
+    const explanation = `Motoring — steering the direct bearing to the destination (${Math.round(nextBearing)}°). Heading adjusted from ${prevLeg.heading}° to ${nextLeg.heading}° to track the shifting bearing as the boat makes ground, not to hold a wind angle.`;
+    return {
+      category: 'bearing-shift', sameCategory: true, isManeuver: false,
+      statLine, explanation,
+      prevBearing: Math.round(prevBearing), nextBearing: Math.round(nextBearing),
+      deltaHeading: Math.round(dHeading), deltaWindDir: Math.round(dWindDir),
+      deltaWindSpeed: Math.round(dWindSpeed), deltaBearing: Math.round(dBearing),
+      prevPointOfSail: motorPointOfSail(prevLeg), nextPointOfSail: 'under engine',
+      motoring: true
+    };
+  }
 
   let category;
   let isManeuver = false;
@@ -92,14 +113,15 @@ export function classifyTransition(prevLeg, nextLeg, destination) {
 
 export function classifyInitial(leg, destination) {
   const brg = bearing(leg.waypoint, destination);
-  const cat = pointOfSailCategory(leg.windAngle);
+  const motoring = leg.config === 'motor';
   return {
     heading: leg.heading,
     bearing: Math.round(brg),
     windDir: leg.windDir,
     windSpeed: leg.windSpeed,
-    pointOfSail: cat,
-    tackSide: leg.tackSide
+    pointOfSail: motoring ? 'under engine' : pointOfSailCategory(leg.windAngle),
+    tackSide: motoring ? null : leg.tackSide,
+    motoring
   };
 }
 

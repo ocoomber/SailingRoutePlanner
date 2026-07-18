@@ -2,7 +2,7 @@ import { calculateRoute } from './router.js';
 import { getPolarForConfig } from './sail-configs.js';
 
 async function runBlock(config, isLast, arriveByTime, fromPoint, fromTime, ctx) {
-  const { end, basePolars, windGrid, tidalData, params, opts, fineCoastline, corridor } = ctx;
+  const { end, basePolars, windGrid, tidalData, params, opts, fineCoastline, corridor, coarseCoastline } = ctx;
 
   const blockParams = {
     start: fromPoint, end,
@@ -14,12 +14,14 @@ async function runBlock(config, isLast, arriveByTime, fromPoint, fromTime, ctx) 
     windGrid,
     tidalCurrent: tidalData,
     clearanceMarginNm: opts.clearanceMarginNm,
+    harbourClearanceNm: opts.harbourClearanceNm,
     noGoAngleDeg: params.noGoAngleDeg,
     tackPenaltyKn: params.tackPenaltyKn,
     allowIntoWind: config === 'motor',
     headingsPerStep: opts.headingsPerStep,
     maxSteps: opts.maxSteps,
-    corridor
+    corridor,
+    coarseCoastline
   };
 
   if (!isLast) blockParams.arriveByTime = arriveByTime;
@@ -58,7 +60,16 @@ export async function executeBlocks(blocks, ctx) {
     logs.push(result.log);
     if (!result.route || result.route.length === 0) break;
 
-    for (const leg of result.route) leg.config = executedConfig;
+    for (const leg of result.route) {
+      leg.config = executedConfig;
+      // A motor leg is steered on a bearing, not a wind angle — don't let the
+      // sail-derived point-of-sail / tack narrative describe it.
+      if (executedConfig === 'motor') {
+        leg.windDescription = 'under engine';
+        leg.tackSide = null;
+        leg.maneuver = null; // a tack/gybe is a wind-angle event, not a motor one
+      }
+    }
 
     const legStartIndex = legs.length;
     legs.push(...result.route);

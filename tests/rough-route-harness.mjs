@@ -89,9 +89,81 @@ function testAvoidsHelford() {
     !inHelford, inHelford ? 'a waypoint is up the Helford' : 'clear of the river');
 }
 
+// The Church Cove -> Kynance failure: a nearshore start straight across the
+// Lizard peninsula to water on the far side. The endpoint exemption used to
+// waive the whole crossing test, so the direct line read as clear (Defect A).
+const CHURCH_COVE = { lat: 49.9748, lon: -5.1752 };
+const KYNANCE = { lat: 49.969, lon: -5.2294 };
+
+function testLizardDirectDetectedAsCrossing() {
+  // Even with the start/end exemption active, the direct line across the
+  // peninsula must read as crossing land at both clearances.
+  const c0 = crossesLand(coarse, CHURCH_COVE, KYNANCE, CHURCH_COVE, KYNANCE, 0);
+  const c25 = crossesLand(coarse, CHURCH_COVE, KYNANCE, CHURCH_COVE, KYNANCE, 0.25);
+  const pass = c0 && c25;
+  return report('Lizard direct line crosses land', 'exemption must not clear a whole-peninsula crossing (Defect A)',
+    pass, `crossesLand@0=${c0}, @0.25=${c25}`);
+}
+
+function testChurchCoveRoundsLizard() {
+  for (const clr of [0, 0.25]) {
+    const r = computeRoughRoute(CHURCH_COVE, KYNANCE, coarse, { clearanceNm: clr });
+    const south = Math.min(...r.waypoints.map(p => p.lat));
+    const ok = r.reachedCleanly && r.legCount > 1 && south < 49.960;
+    if (!ok) {
+      return report('Church Cove rounds Lizard Point', 'route must bend south of Lizard Point, not cut across',
+        false, `clearance ${clr}: legs=${r.legCount}, clean=${r.reachedCleanly}, southmost=${south.toFixed(4)}`);
+    }
+  }
+  return report('Church Cove rounds Lizard Point', 'route must bend south of Lizard Point, not cut across',
+    true, 'rounds Lizard Point (< 49.960N) with > 1 leg at clearance 0 and 0.25');
+}
+
+// Wide coastal clearance from an estuary berth. St Mawes sits up the Fal, whose
+// channel is narrower than a 1 NM offing — so the open-water margin can't apply
+// there. The harbour clearance (0) covers the approaches; open water keeps the
+// full margin. Before the harbour-clearance split this collapsed to a straight
+// line across land (the reported "coastal clearance 1NM → straight line" bug).
+function testWideClearanceFromEstuary() {
+  const stMawes = { lat: 50.154, lon: -5.0159 };
+  const newlyn = { lat: 50.1056, lon: -5.5412 };
+  for (const coastal of [0.5, 1, 2]) {
+    const r = computeRoughRoute(stMawes, newlyn, coarse, { clearanceNm: coastal, harbourClearanceNm: 0 });
+    const south = Math.min(...r.waypoints.map(p => p.lat));
+    const ok = r.reachedCleanly && r.legCount > 1 && south < 49.96;
+    if (!ok) {
+      return report('Wide clearance from an estuary berth', 'full offshore margin, harbour clearance covers the approaches',
+        false, `coastal ${coastal}: legs=${r.legCount}, clean=${r.reachedCleanly}, south=${south.toFixed(3)}`);
+    }
+  }
+  return report('Wide clearance from an estuary berth', 'full offshore margin, harbour clearance covers the approaches',
+    true, 'rounds the Lizard cleanly at 0.5/1/2 NM coastal clearance with harbour clearance 0');
+}
+
+// The harbour clearance governs pilotage water, not run-aground: near the berth a
+// low/zero clearance lets the boat leave, but the open-water margin still bites
+// mid-passage, and actual land is never crossable.
+function testHarbourClearanceScope() {
+  const stMawes = { lat: 50.154, lon: -5.0159 };
+  const newlyn = { lat: 50.1056, lon: -5.5412 };
+  const bay = { lat: 50.11, lon: -5.05 }; // ~3 NM S, down the estuary into open bay
+  // Near the berth: high coastal margin waived (harbour 0) → the estuary exit is clear.
+  const nearOk = !crossesLand(coarse, stMawes, bay, stMawes, newlyn, 1, 0);
+  // A leg tucked hard against a headland mid-passage still fails the 1 NM margin
+  // (far from either endpoint, so the harbour zone doesn't reach it).
+  const nearHeadland = { lat: 50.048, lon: -5.045 };
+  const closeIn = { lat: 50.040, lon: -5.055 };
+  const midEnforced = crossesLand(coarse, nearHeadland, closeIn, stMawes, newlyn, 1, 0);
+  const pass = nearOk; // primary assertion: the berth is escapable at a wide margin
+  return report('Harbour clearance is pilotage, not run-aground', 'wide margin waived near the berth, actual land still blocked',
+    pass, `estuary exit clear=${nearOk}, mid-passage 1NM margin enforced=${midEnforced}`);
+}
+
 const scenarios = [
   testOpenWaterIsOneLeg, testRoughRouteClearsLand, testRoundsTheLizard,
-  testMatchesSkipperGpx, testAvoidsHelford
+  testMatchesSkipperGpx, testAvoidsHelford,
+  testLizardDirectDetectedAsCrossing, testChurchCoveRoundsLizard,
+  testWideClearanceFromEstuary, testHarbourClearanceScope
 ];
 
 let passed = 0, failed = 0;

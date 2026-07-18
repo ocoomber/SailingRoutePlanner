@@ -32,6 +32,7 @@ const landPassed = run('Land-avoidance tests', 'run.mjs');
 const sailingPassed = run('Sailing-performance tests', 'sailing-harness.mjs');
 const coastlinePassed = run('Coastline system tests', 'coastline-system.mjs');
 const roughRoutePassed = run('Rough-route engine tests', 'rough-route-harness.mjs');
+const corridorPassed = run('Corridor / along-route cost tests', 'corridor-harness.mjs');
 const windPassed = run('Wind interpolation tests', 'wind-interpolation-harness.mjs');
 const comfortPassed = run('Comfort-based sail-config tests', 'comfort-harness.mjs');
 const bandPassed = run('Hysteresis band / comfort-ceiling tests', 'comfort-band-harness.mjs');
