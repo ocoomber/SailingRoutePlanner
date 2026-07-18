@@ -105,6 +105,13 @@
 
       <div id="inspector" class="inspector-bar"></div>
     </main>
+
+    <!-- Mobile only: edge tabs slide the panels in from their side; the backdrop
+         (or the panel's − button) slides them back out. On desktop these are
+         hidden and the panels float as before. -->
+    <button type="button" class="panel-fab fab-layers" data-open="layers-panel" aria-label="Open layers menu">Layers</button>
+    <button type="button" class="panel-fab fab-trail" data-open="trail-panel" aria-label="Open decision trail">Trail</button>
+    <div class="panel-backdrop" id="panel-backdrop"></div>
   </div>
 
   <!-- SETTINGS VIEW -->
