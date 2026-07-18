@@ -16,9 +16,6 @@ import {
 
 // Tries the requested clearance first, then relaxes toward the harbour.
 const NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM = [0.2, 0.1, 0.05];
-// How far the sailing pass may stray either side of the rough course. Wide
-// enough to tack a beat, tight enough to keep it off a mid-passage river.
-const CORRIDOR_WIDTH_NM = 3;
 // Beyond this the plan is not a passage to the destination and must say so.
 const ARRIVAL_SHORTFALL_NM = 1;
 
@@ -31,7 +28,12 @@ const DEFAULT_ROUTER_OPTS = {
   // Clearance near the start/destination, where the skipper cons the boat in and
   // out of port. Default 0: don't plan any offshore margin there — just don't
   // cross land. The coastal margin above still holds in open water.
-  harbourClearanceNm: 0
+  harbourClearanceNm: 0,
+  // How far from start/end that harbour clearance applies (must reach open water).
+  harbourZoneNm: 2,
+  // How far the sailing pass may stray either side of the rough course. Wide
+  // enough to tack a beat, tight enough to keep it off a mid-passage river.
+  corridorWidthNm: 3
 };
 
 export async function planPassage(input) {
@@ -49,12 +51,14 @@ export async function planPassage(input) {
   // which fills rivers in, so it never heads up a dead end. Relax the clearance
   // only if the course can't be drawn at the requested margin (a tight harbour).
   const harbourClearanceNm = opts.harbourClearanceNm ?? 0;
+  const harbourZoneNm = opts.harbourZoneNm ?? null;
+  const roughOpts = (clearanceNm) => ({ clearanceNm, harbourClearanceNm, harbourZoneNm });
   let effectiveClearanceNm = requestedClearanceNm;
-  let rough = computeRoughRoute(start, end, coastlineCoarse, { clearanceNm: effectiveClearanceNm, harbourClearanceNm });
+  let rough = computeRoughRoute(start, end, coastlineCoarse, roughOpts(effectiveClearanceNm));
   for (const fallback of NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM) {
     if (rough.reachedCleanly || fallback >= effectiveClearanceNm) continue;
     effectiveClearanceNm = fallback;
-    rough = computeRoughRoute(start, end, coastlineCoarse, { clearanceNm: effectiveClearanceNm, harbourClearanceNm });
+    rough = computeRoughRoute(start, end, coastlineCoarse, roughOpts(effectiveClearanceNm));
     if (rough.reachedCleanly) break;
   }
 
@@ -71,9 +75,10 @@ export async function planPassage(input) {
   }
 
   const fineOpts = { ...opts, clearanceMarginNm: effectiveClearanceNm };
+  const corridorWidthNm = opts.corridorWidthNm ?? 3;
 
   // The rough course defines the corridor both passes must stay inside.
-  const corridor = makeCorridor(rough.waypoints, CORRIDOR_WIDTH_NM);
+  const corridor = makeCorridor(rough.waypoints, corridorWidthNm);
 
   // Pass 2a — walk the rough course through the forecast to get the wind/time
   // timeline the config planner reasons over (motor out, sails up, reef, etc.).
@@ -91,7 +96,7 @@ export async function planPassage(input) {
   // Only the coast near the corridor can affect a route confined to it. Pruning
   // to it keeps the per-point land test cheap even when the whole viewport's
   // worth of detail tiles is loaded.
-  const finePruned = pruneCoastlineToCorridor(fineCoastline, rough.waypoints, CORRIDOR_WIDTH_NM + 3);
+  const finePruned = pruneCoastlineToCorridor(fineCoastline, rough.waypoints, corridorWidthNm + 3);
 
   // Pass 2b — sail each config block for real, constrained to the corridor.
   const execution = await executeBlocks(blocks, {
@@ -150,7 +155,7 @@ export async function planPassage(input) {
         reachedCleanly: rough.reachedCleanly,
         nodeCount: rough.nodeCount
       },
-      corridorWidthNm: CORRIDOR_WIDTH_NM,
+      corridorWidthNm,
       clearanceUsedNm: effectiveClearanceNm
     }
   };

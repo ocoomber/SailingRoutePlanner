@@ -17,7 +17,10 @@ export function getInputs() {
     timeStep: routing.timeStep,
     headingThreshold: routing.headingThreshold,
     clearanceMargin: routing.clearanceMargin,
-    harbourClearanceMargin: routing.harbourClearanceMargin
+    harbourClearanceMargin: routing.harbourClearanceMargin,
+    harbourZoneNm: routing.harbourZoneNm,
+    corridorWidthNm: routing.corridorWidthNm,
+    headingsPerStep: routing.headingsPerStep
   };
 }
 

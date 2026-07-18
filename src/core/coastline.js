@@ -240,7 +240,11 @@ export function crossesLand(coastline, a, b, startPt, endPt, clearanceMarginNm =
   // — the skipper cons the boat in and out, so the open-water margin must not
   // fence it against its own berth. Everywhere else the full coastal margin holds.
   if (clearanceMarginNm > 0 || harbourClearanceNm > 0) {
-    const zone = harbourZoneNmParam != null ? harbourZoneNmParam : defaultHarbourZoneNm(clearanceMarginNm);
+    // Never let the zone fall below the coastal clearance, or the boat would be
+    // fenced against its own berth by a margin it can't satisfy on the way out.
+    const zone = harbourZoneNmParam != null
+      ? Math.max(harbourZoneNmParam, clearanceMarginNm)
+      : defaultHarbourZoneNm(clearanceMarginNm);
     const positiveClrs = [clearanceMarginNm, harbourClearanceNm].filter(c => c > 0);
     const stepSize = Math.min(Math.min(...positiveClrs) / 2, 0.5);
     const nSteps = Math.max(1, Math.ceil(legDist / stepSize));

@@ -24,7 +24,8 @@ function runGeometryMode(start, end, inputs) {
   // start can always get clear — no need to relax the open-water margin.
   const rough = computeRoughRoute(start, end, getCoastlineManager().getCoarseCoastline(), {
     clearanceNm: inputs.clearanceMargin,
-    harbourClearanceNm: inputs.harbourClearanceMargin
+    harbourClearanceNm: inputs.harbourClearanceMargin,
+    harbourZoneNm: inputs.harbourZoneNm
   });
 
   const warnings = [];
@@ -95,8 +96,11 @@ export async function onCalculate() {
         routerOpts: {
           timeStepMinutes: inputs.timeStep,
           headingThreshold: inputs.headingThreshold,
+          headingsPerStep: inputs.headingsPerStep,
           clearanceMarginNm: inputs.clearanceMargin,
-          harbourClearanceNm: inputs.harbourClearanceMargin
+          harbourClearanceNm: inputs.harbourClearanceMargin,
+          harbourZoneNm: inputs.harbourZoneNm,
+          corridorWidthNm: inputs.corridorWidthNm
         }
       });
       legs = passage.legs;

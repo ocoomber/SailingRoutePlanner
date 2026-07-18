@@ -108,6 +108,9 @@ export function toRoutingOpts() {
     timeStep: getValue('timeStep'),
     headingThreshold: getValue('headingThreshold'),
     clearanceMargin: getValue('clearanceMargin'),
-    harbourClearanceMargin: getValue('harbourClearanceMargin')
+    harbourClearanceMargin: getValue('harbourClearanceMargin'),
+    harbourZoneNm: getValue('harbourZoneNm'),
+    corridorWidthNm: getValue('corridorWidthNm'),
+    headingsPerStep: getValue('headingsPerStep')
   };
 }
