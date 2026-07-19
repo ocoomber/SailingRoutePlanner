@@ -170,6 +170,36 @@ export function computeRoughRoute(start, end, coastline, { clearanceNm = 0.25, h
   };
 }
 
+// The skipper-drawn counterpart to computeRoughRoute: the human has already
+// chosen the course and the clearance, so we don't generate anything — we just
+// assess the given polyline the same way, so the rest of the planner reads it
+// identically (same shape as computeRoughRoute's return). Crossings are tested
+// at clearance 0: the point of drawing by hand is choosing your own offing, and
+// the coarse rings fill rivers in as land, so a margin test would false-positive
+// on legitimate harbour approaches. Pass 2 against the fine tiles is the real
+// gate on whether the course actually sails.
+export function assessProvidedRoute(waypoints, coastline, { clearanceNm = 0 } = {}) {
+  const start = waypoints[0];
+  const end = waypoints[waypoints.length - 1];
+  const crossings = [];
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    if (coastline && crossesLand(coastline, waypoints[i], waypoints[i + 1], start, end, clearanceNm, 0, null)) {
+      crossings.push(i);
+    }
+  }
+  const totalDistanceNm = waypoints.reduce(
+    (sum, p, i) => i === 0 ? 0 : sum + distanceNm(waypoints[i - 1], p), 0);
+  return {
+    waypoints,
+    legCount: waypoints.length - 1,
+    totalDistanceNm,
+    reachedCleanly: crossings.length === 0,
+    crossingLegIndices: crossings,
+    nodeCount: waypoints.length,
+    provided: true
+  };
+}
+
 // Turn the rough polyline into leg objects the map and trail can render. This is
 // the geometry-only ("route-only") view: no wind, no sail config — just the
 // course. Shape matches what the router emits so the UI treats them the same.

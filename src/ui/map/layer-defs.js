@@ -13,9 +13,20 @@ import { buildRouteLegs, applyRouteSelection, buildManeuverMarkers, buildWaypoin
 import { buildWindArrows } from './layers/wind-layers.js';
 import { buildTwaLabels } from './layers/sailing-layers.js';
 import { buildLandDeviationMarkers, buildConfigDecisionMarkers } from './layers/decision-layers.js';
+import { buildSeamarks, SEAMARK_SWATCH } from './layers/chart-layers.js';
 import { configLegend } from './leg-styles.js';
 
 export const LAYER_DEFS = [
+  {
+    id: 'seamarks',
+    label: 'Sea marks (OpenSeaMap)',
+    description: 'Buoys, lights, depth contours and traffic-separation marks from OpenSeaMap — the chart detail for judging clearance while you draw the course.',
+    group: 'Charts',
+    swatch: SEAMARK_SWATCH,
+    defaultOn: false,
+    dependsOn: [],
+    build: buildSeamarks
+  },
   {
     id: 'fine-land',
     label: 'Fine land (detail tiles)',

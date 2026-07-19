@@ -1,6 +1,8 @@
 // Runs a passage and pushes the result into the render state and the trail.
 
-import { computeRoughRoute, roughRouteToLegs } from '../core/rough-route.js';
+import { assessProvidedRoute, roughRouteToLegs } from '../core/rough-route.js';
+import { getRoute } from './route-editor.js';
+import { toWaypoints, isPlannable } from '../core/route-model.js';
 import { planPassageForBrowser } from '../services/passage-service.js';
 import { mergeComfortParams } from '../core/comfort-params.js';
 import { buildRouteLog } from '../core/route-log.js';
@@ -14,27 +16,18 @@ import { getInputs, validateInputs } from './controls.js';
 import { showError, hideError, showLoading, hideLoading, showLog, hideLog, showWarnings } from './status.js';
 import { toComfortParams, toRoutingOpts } from './settings-store.js';
 
-// Route-only mode shows the rough course: the deterministic taut string around
-// land, with no wind or sail logic applied. Computed against the coarse
-// coastline (which fills rivers in), so it never wanders up a dead end.
-function runGeometryMode(start, end, inputs) {
-  // Full coastal clearance in open water; the harbour clearance (usually 0)
-  // applies near the start/finish, where the skipper cons the boat in and out.
-  // The harbour zone auto-sizes to at least the coastal clearance, so a near-shore
-  // start can always get clear — no need to relax the open-water margin.
-  const rough = computeRoughRoute(start, end, getCoastlineManager().getCoarseCoastline(), {
-    clearanceNm: inputs.clearanceMargin,
-    harbourClearanceNm: inputs.harbourClearanceMargin,
-    harbourZoneNm: inputs.harbourZoneNm
-  });
-
+// Route-only mode shows the drawn course itself — the legs the skipper laid
+// down, with no wind or sail logic applied. It assesses (does not regenerate)
+// the drawn route against the coarse coastline so you can see, before running
+// the full plan, whether any leg cuts across land.
+function runGeometryMode(waypoints) {
+  const rough = assessProvidedRoute(waypoints, getCoastlineManager().getCoarseCoastline());
   const warnings = [];
   if (!rough.reachedCleanly) {
     warnings.push(
-      `Could not draw a course clear of land at ${inputs.clearanceMargin}NM coastal clearance — the straight line shown crosses land. Check the start and end are in open water, or lower the coastal/harbour clearance.`
+      `Your drawn route crosses the coarse coastline on ${rough.crossingLegIndices.length} leg(s). Check those legs against the chart — the full sailing plan may not find a route there.`
     );
   }
-
   return { rough, legs: roughRouteToLegs(rough.waypoints), warnings };
 }
 
@@ -46,10 +39,17 @@ function departureFor(inputs) {
   return { targetTime, departureTime };
 }
 
-export async function onCalculate() {
+export async function onCreateSailingPlan() {
   const inputs = getInputs();
   const errors = validateInputs(inputs);
   if (errors.length > 0) { showError(errors.join('; ')); return; }
+
+  const route = getRoute();
+  if (!isPlannable(route)) {
+    showError('Draw a rough course first — click the map to drop at least two waypoints.');
+    return;
+  }
+  const drawnWaypoints = toWaypoints(route);
 
   const manager = getCoastlineManager();
   if (!manager) { showError('Data not loaded yet. Please wait a moment.'); return; }
@@ -73,8 +73,8 @@ export async function onCalculate() {
   showLoading();
 
   try {
-    const start = { lat: inputs.startLat, lon: inputs.startLon };
-    const end = { lat: inputs.endLat, lon: inputs.endLon };
+    const start = drawnWaypoints[0];
+    const end = drawnWaypoints[drawnWaypoints.length - 1];
     const { departureTime } = departureFor(inputs);
     const t0 = Date.now();
 
@@ -82,13 +82,14 @@ export async function onCalculate() {
     let rough = null, passage = null;
 
     if (inputs.geometryMode) {
-      const result = runGeometryMode(start, end, inputs);
+      const result = runGeometryMode(drawnWaypoints);
       legs = result.legs;
       rough = result.rough;
       warnings = result.warnings;
     } else {
       passage = await planPassageForBrowser({
         start, end,
+        roughRoute: drawnWaypoints,
         departureTime: departureTime.toISOString(),
         basePolars: getPolars(),
         comfortParams,

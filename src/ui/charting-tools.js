@@ -1,5 +1,23 @@
 import { distanceNm, bearing } from '../core/geometry.js';
 
+// A draggable handle. Uses L.marker (not L.circleMarker — Leaflet ignores
+// `draggable` on circle markers, which is why the old bar endpoints never
+// moved). bubblingMouseEvents:false keeps a handle drag from also panning the
+// map or dropping a waypoint.
+function makeHandle(lat, lng, fill) {
+  return L.marker([lat, lng], {
+    draggable: true,
+    bubblingMouseEvents: false,
+    keyboard: false,
+    icon: L.divIcon({
+      className: 'chart-handle',
+      html: `<span style="background:${fill}"></span>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    })
+  });
+}
+
 export function addChartingTools(map) {
   const state = {
     activeTool: null,
@@ -7,7 +25,8 @@ export function addChartingTools(map) {
     bars: []
   };
 
-  const container = L.control({ position: 'topright' });
+  // Bottom-right: the top-right corner is the Decision-trail panel's lane.
+  const container = L.control({ position: 'bottomright' });
 
   container.onAdd = function(map) {
     const div = L.DomUtil.create('div', 'charting-tools');
@@ -272,13 +291,8 @@ export function addChartingTools(map) {
     const ptA = { lat: center.lat - latOffset * 0.5, lng: center.lng - lonOffset * 0.3 };
     const ptB = { lat: center.lat + latOffset * 0.5, lng: center.lng + lonOffset * 0.3 };
 
-    const markerA = L.circleMarker([ptA.lat, ptA.lng], {
-      radius: 7, color: '#f59e0b', fillColor: '#fbbf24', fillOpacity: 0.9, weight: 2, draggable: true
-    }).addTo(map);
-
-    const markerB = L.circleMarker([ptB.lat, ptB.lng], {
-      radius: 7, color: '#f59e0b', fillColor: '#fbbf24', fillOpacity: 0.9, weight: 2, draggable: true
-    }).addTo(map);
+    const markerA = makeHandle(ptA.lat, ptA.lng, '#fbbf24').addTo(map);
+    const markerB = makeHandle(ptB.lat, ptB.lng, '#fbbf24').addTo(map);
 
     const line = L.polyline([[ptA.lat, ptA.lng], [ptB.lat, ptB.lng]], {
       color: '#f59e0b', weight: 3, opacity: 0.8
@@ -292,9 +306,7 @@ export function addChartingTools(map) {
       .setContent('')
       .addTo(map);
 
-    const centerHandle = L.circleMarker([cx, cy], {
-      radius: 5, color: '#f59e0b', fillColor: '#fff', fillOpacity: 1, weight: 2, draggable: true
-    }).addTo(map);
+    const centerHandle = makeHandle(cx, cy, '#fff').addTo(map);
 
     const deleteMarker = L.marker([cx + 0.002, cy + 0.002], {
       icon: L.divIcon({
@@ -331,6 +343,7 @@ export function addChartingTools(map) {
 
   return {
     clearAll,
-    isRulerActive: () => state.activeTool === 'ruler'
+    isRulerActive: () => state.activeTool === 'ruler',
+    isToolActive: () => state.activeTool !== null
   };
 }

@@ -8,7 +8,7 @@ import { refreshMapSize } from './map/map-core.js';
 const isMobile = () => window.matchMedia('(max-width: 640px)').matches;
 
 export function initPanels() {
-  const panels = ['layers-panel', 'trail-panel']
+  const panels = ['route-panel', 'layers-panel', 'trail-panel']
     .map(id => document.getElementById(id))
     .filter(Boolean);
   const backdrop = document.getElementById('panel-backdrop');

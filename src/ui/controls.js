@@ -6,10 +6,6 @@ import { toRoutingOpts } from './settings-store.js';
 export function getInputs() {
   const routing = toRoutingOpts();
   return {
-    startLat: parseFloat(document.getElementById('start-lat').value),
-    startLon: parseFloat(document.getElementById('start-lon').value),
-    endLat: parseFloat(document.getElementById('end-lat').value),
-    endLon: parseFloat(document.getElementById('end-lon').value),
     departureDate: document.getElementById('departure-date').value,
     departureTime: document.getElementById('departure-time').value,
     timeMode: document.querySelector('input[name="time-mode"]:checked').value,
@@ -24,41 +20,13 @@ export function getInputs() {
   };
 }
 
-export function setCoordinates(field, lat, lon) {
-  if (field === 'start') {
-    document.getElementById('start-lat').value = lat.toFixed(4);
-    document.getElementById('start-lon').value = lon.toFixed(4);
-  } else {
-    document.getElementById('end-lat').value = lat.toFixed(4);
-    document.getElementById('end-lon').value = lon.toFixed(4);
-  }
-}
-
-export function clearCoordinates() {
-  for (const id of ['start-lat', 'start-lon', 'end-lat', 'end-lon']) {
-    document.getElementById(id).value = '';
-  }
-}
-
+// The course now comes from the drawn route, so this validates only the depart/
+// arrive time. Route presence is checked in passage-run against the editor.
 export function validateInputs(inputs) {
   const errors = [];
-
-  if (isNaN(inputs.startLat) || isNaN(inputs.startLon)) {
-    errors.push('Start coordinates are required');
-  } else if (inputs.startLat < -90 || inputs.startLat > 90 || inputs.startLon < -180 || inputs.startLon > 180) {
-    errors.push('Start coordinates are out of range');
-  }
-
-  if (isNaN(inputs.endLat) || isNaN(inputs.endLon)) {
-    errors.push('End coordinates are required');
-  } else if (inputs.endLat < -90 || inputs.endLat > 90 || inputs.endLon < -180 || inputs.endLon > 180) {
-    errors.push('End coordinates are out of range');
-  }
-
   if (!inputs.departureDate || !inputs.departureTime) {
     errors.push('Date and time are required');
   }
-
   return errors;
 }
 

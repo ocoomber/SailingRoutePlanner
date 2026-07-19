@@ -13,19 +13,7 @@
     <header class="command-bar">
       <div class="command-brand">
         <strong>Passage Planner</strong>
-        <span class="build-number">Build 51 — 2026-07-18 06:02 UTC</span>
-      </div>
-
-      <div class="command-group">
-        <label for="start-lat">Start</label>
-        <input type="number" id="start-lat" step="any" placeholder="lat" class="coord-input">
-        <input type="number" id="start-lon" step="any" placeholder="lon" class="coord-input">
-      </div>
-
-      <div class="command-group">
-        <label for="end-lat">End</label>
-        <input type="number" id="end-lat" step="any" placeholder="lat" class="coord-input">
-        <input type="number" id="end-lon" step="any" placeholder="lon" class="coord-input">
+        <span class="build-number">Build 52 — 2026-07-19 22:46 UTC</span>
       </div>
 
       <div class="command-group">
@@ -47,18 +35,47 @@
       </div>
 
       <div class="command-actions">
-        <button id="calculate-btn" class="primary-btn">Calculate Route</button>
-        <button id="clear-btn" class="secondary-btn">Clear</button>
+        <button id="calculate-btn" class="primary-btn">Create Sailing Plan</button>
+        <button id="clear-btn" class="secondary-btn">Clear plan</button>
         <a href="#/settings" class="gear-btn" title="Settings — all comfort &amp; router parameters">⚙</a>
       </div>
     </header>
 
-    <p class="hint command-hint" id="time-hint">When you plan to leave</p>
+    <p class="hint command-hint" id="time-hint">When you plan to leave — draw your rough course on the map, then create the plan</p>
 
     <!-- Panels are SIBLINGS of #map, never children: as children every click on a
          panel would also reach Leaflet and move the start/end marker. -->
     <main class="map-stage">
       <div id="map"></div>
+
+      <aside class="floating-panel panel-route" id="route-panel">
+        <div class="panel-head">
+          <h2>Route</h2>
+          <button type="button" class="panel-collapse" data-panel="route-panel">−</button>
+        </div>
+        <div class="panel-body">
+          <div class="route-actions">
+            <button id="route-suggest" class="route-action" title="Auto-generate a rough course you can then edit">Suggest</button>
+            <button id="route-reverse" class="route-action" title="Reverse the route">Reverse</button>
+            <button id="route-clear" class="route-action" title="Delete the drawn route">Clear route</button>
+          </div>
+          <div class="route-actions">
+            <button id="route-export-gpx" class="route-action" title="Export as GPX for a chart plotter / nav system">Export GPX</button>
+            <button id="route-export-csv" class="route-action" title="Export as CSV">Export CSV</button>
+            <button id="route-import" class="route-action" title="Import a GPX or CSV route">Import…</button>
+            <input type="file" id="route-import-file" accept=".gpx,.csv,.txt" hidden>
+          </div>
+          <div class="route-variation">
+            <label for="route-variation">Mag. variation</label>
+            <input type="number" id="route-variation" step="0.1" min="0" placeholder="0" class="coord-input">
+            <select id="route-variation-sign">
+              <option value="W">W</option>
+              <option value="E">E</option>
+            </select>
+          </div>
+          <div id="route-content"></div>
+        </div>
+      </aside>
 
       <aside class="floating-panel panel-layers" id="layers-panel">
         <div class="panel-head">
@@ -109,6 +126,7 @@
     <!-- Mobile only: edge tabs slide the panels in from their side; the backdrop
          (or the panel's − button) slides them back out. On desktop these are
          hidden and the panels float as before. -->
+    <button type="button" class="panel-fab fab-route" data-open="route-panel" aria-label="Open route panel">Route</button>
     <button type="button" class="panel-fab fab-layers" data-open="layers-panel" aria-label="Open layers menu">Layers</button>
     <button type="button" class="panel-fab fab-trail" data-open="trail-panel" aria-label="Open decision trail">Trail</button>
     <div class="panel-backdrop" id="panel-backdrop"></div>

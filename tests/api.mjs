@@ -119,6 +119,42 @@ async function testDebugIncluded() {
   });
 }
 
+async function testRoughRouteRequest() {
+  await withServer(async (base) => {
+    const resp = await fetch(`${base}/plan-route`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roughRoute: [
+          { lat: 50.0, lon: -3.0 },
+          { lat: 50.08, lon: -2.75 },
+          { lat: 50.15, lon: -2.5 }
+        ],
+        departureTime: '2026-07-16T12:00:00.000Z',
+        debug: true
+      })
+    });
+    const body = await resp.json();
+    check('roughRoute request returns 200', resp.status === 200, `got ${resp.status}`);
+    check('roughRoute is taken as the provided spine',
+      body.debug && body.debug.roughRoute && body.debug.roughRoute.provided === true,
+      `provided=${body.debug?.roughRoute?.provided}`);
+  });
+}
+
+async function testRoughRouteTooShort() {
+  await withServer(async (base) => {
+    const resp = await fetch(`${base}/plan-route`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roughRoute: [{ lat: 50.0, lon: -3.0 }], departureTime: '2026-07-16T12:00:00.000Z' })
+    });
+    const body = await resp.json();
+    check('single-point roughRoute returns 400', resp.status === 400, `got ${resp.status}`);
+    check('roughRoute error names the field', typeof body.error === 'string' && body.error.includes('roughRoute'), body.error);
+  });
+}
+
 async function testHealth() {
   await withServer(async (base) => {
     const resp = await fetch(`${base}/health`);
@@ -133,6 +169,8 @@ await testMissingStart();
 await testInvalidComfortParam();
 await testDebugStripped();
 await testDebugIncluded();
+await testRoughRouteRequest();
+await testRoughRouteTooShort();
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

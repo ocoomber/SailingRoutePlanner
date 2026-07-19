@@ -136,8 +136,75 @@ body {
   box-shadow: var(--panel-shadow);
 }
 
-.panel-layers { left: 0.6rem; width: 17rem; }
+/* Left column. Route sits below Leaflet's zoom control (top-left); Layers is
+   anchored to the bottom. The scale + charting controls are moved to the
+   bottom-right (see map-core.js / charting-tools.js) so nothing sits under a
+   panel. */
+.panel-route { left: 0.6rem; width: 18rem; top: 5.2rem; max-height: calc(60% - 6rem); }
+.panel-layers { left: 0.6rem; width: 18rem; top: auto; bottom: 0.6rem; max-height: calc(40% - 1.2rem); }
 .panel-trail { right: 0.6rem; width: 23rem; }
+
+/* ---------- Route panel ---------- */
+.route-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.4rem; }
+.route-action {
+  flex: 1 1 auto; padding: 0.3rem 0.4rem; font-size: 0.72rem; font-weight: 600;
+  border: 1px solid var(--color-border); border-radius: var(--radius);
+  background: #f9fafb; color: var(--color-text); cursor: pointer; white-space: nowrap;
+}
+.route-action:hover { background: #eef2f7; }
+.route-variation {
+  display: flex; align-items: center; gap: 0.35rem; margin: 0.2rem 0 0.5rem;
+  font-size: 0.72rem; color: var(--color-muted);
+}
+.route-variation .coord-input { width: 4rem; }
+.route-variation select { padding: 0.2rem; }
+.route-empty { font-size: 0.75rem; color: var(--color-muted); line-height: 1.5; }
+.route-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+.route-table th {
+  text-align: left; font-weight: 600; color: var(--color-muted);
+  border-bottom: 1px solid var(--color-border); padding: 0.2rem 0.3rem;
+}
+.route-table td { padding: 0.22rem 0.3rem; border-bottom: 1px solid #f0f0f3; vertical-align: top; }
+.route-num { font-weight: 700; color: var(--color-primary); white-space: nowrap; }
+.route-leg { font-variant-numeric: tabular-nums; }
+.route-dim { color: var(--color-muted); }
+.route-note-btn, .route-del {
+  border: none; background: none; cursor: pointer; font-size: 0.85rem;
+  color: var(--color-muted); padding: 0 0.2rem; line-height: 1;
+}
+.route-note-btn.has-note { color: var(--color-primary); }
+.route-del:hover { color: #dc2626; }
+.route-note-row td { color: var(--color-muted); font-style: italic; padding-top: 0; }
+.route-note-editor textarea {
+  width: 100%; font-size: 0.72rem; padding: 0.3rem; border: 1px solid var(--color-border);
+  border-radius: var(--radius); resize: vertical; box-sizing: border-box;
+}
+.route-note-actions { display: flex; gap: 0.3rem; margin-top: 0.3rem; }
+.route-note-actions button {
+  font-size: 0.7rem; padding: 0.2rem 0.5rem; border: 1px solid var(--color-border);
+  border-radius: var(--radius); background: #f9fafb; cursor: pointer;
+}
+.route-note-save { background: var(--color-primary) !important; color: #fff; border-color: var(--color-primary) !important; }
+.route-totals { margin-top: 0.4rem; font-size: 0.72rem; color: var(--color-muted); font-variant-numeric: tabular-nums; }
+
+/* Draggable charting handles (bar endpoints / centre). */
+.chart-handle span {
+  display: block; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid #f59e0b; box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* Numbered waypoint markers on the map. */
+.route-wp-icon span {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  color: #fff; font-size: 12px; font-weight: 700;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.route-leg-tooltip {
+  background: rgba(37, 99, 235, 0.92); color: #fff; border: none;
+  font-size: 11px; font-weight: 600; padding: 1px 5px;
+}
+.route-leg-tooltip::before { display: none; }
 
 .panel-head {
   display: flex;
@@ -169,9 +236,11 @@ body {
 
 .inspector-bar {
   position: absolute;
-  left: 0.6rem;
-  right: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 0.6rem;
+  width: max-content;
+  max-width: calc(100% - 22rem);
   z-index: var(--z-panel);
   background: #1a1a2e;
   color: #e2e8f0;
@@ -483,8 +552,10 @@ body {
     transition: transform 0.25s ease;
     z-index: 1200;
   }
-  .panel-layers { left: 0; right: auto; transform: translateX(-100%); }
+  .panel-route,
+  .panel-layers { left: 0; right: auto; top: 0; bottom: 0; max-height: none; transform: translateX(-100%); }
   .panel-trail  { right: 0; left: auto; transform: translateX(100%); }
+  .panel-route.open,
   .panel-layers.open,
   .panel-trail.open { transform: translateX(0); }
 
@@ -515,7 +586,8 @@ body {
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
-  .fab-layers { left: 0; border-radius: 0 var(--radius) var(--radius) 0; }
+  .fab-route  { left: 0; top: 22%; border-radius: 0 var(--radius) var(--radius) 0; }
+  .fab-layers { left: 0; top: 52%; border-radius: 0 var(--radius) var(--radius) 0; }
   .fab-trail  { right: 0; border-radius: var(--radius) 0 0 var(--radius); }
 
   .panel-backdrop {

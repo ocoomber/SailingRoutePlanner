@@ -5,15 +5,24 @@ Pre-departure sailing passage planner for South West England (Cornwall,
 Devon, Dorset), for one boat and skipper. Phase 1 only: no live
 tracking, no GPS, no real-time nav.
 
-**Product surface (current framing — supersedes earlier "web app"
-framing):** the end client will use this via their own ChatGPT
-subscription calling it as a tool. The real product is the API/tool
-contract (`PassageResult` — see `build-plan.md` section 3). The web UI
-is the developer's own debugging and verification surface, not the
-product. `build-plan.md` is the active refactor/build plan;
-`comfort-sailing-rewrite-brief.md` is the design authority for the
-comfort rewrite (WS2). No other briefing documents exist — older ones
-were removed as out of date.
+**Direction (current — supersedes the earlier fully-automatic framing):**
+the skipper **hand-draws the rough course** on the map (choosing their own
+clearance around land, TSS lanes, etc.), then presses **Create Sailing
+Plan**. The drawn route becomes the rough-course spine that the engine's
+corridor + weather/sail-config passes run over. The auto rough-route
+generator is kept as a **Suggest route** helper that seeds an editable
+course. The ultimate goal is unchanged: agent/MCP access through `server/`.
+The human-guided flow also exists to gather data on *how skippers think* —
+the saved route format optionally captures intent (per-waypoint notes,
+edit history) so we can later study route-planning decisions and flag
+likely mistakes.
+
+The real product remains the API/tool contract (`PassageResult`). The web
+UI is the developer's own verification surface and now also the skipper's
+drawing surface. (Historical planning docs `build-plan.md`,
+`comfort-sailing-rewrite-brief.md`, `PLAN-rough-route-truth.md` and
+`coding-constitution.yaml` were removed once their work shipped; git
+history has them.)
 
 ## Stack
 - Vanilla HTML/CSS/JS, ES modules with explicit `.js` extensions, no
@@ -139,12 +148,14 @@ Beneteau Oceanis Clipper 393. Polar: ORC-certified same-model proxy
   document on purpose — a separate settings page would re-fetch the
   polars and coarse coastline, discard every loaded detail tile, and lose
   the map position and computed route.
-- Floating panels (Layers, Decision trail) are **siblings of `#map`, never
-  children**: as children, every click on a panel also reaches Leaflet and
-  moves the start/end marker. They sit at `--z-panel: 1100` to clear
+- Floating panels (Route, Layers, Decision trail) are **siblings of `#map`,
+  never children**: as children, every click on a panel also reaches Leaflet
+  and would drop a waypoint. They sit at `--z-panel: 1100` to clear
   Leaflet's own controls (400–1000).
 - `src/ui/map/` — the map module, split by responsibility:
-  - `map-core.js` — lifecycle, start/end markers, viewport, `fitToLegs`.
+  - `map-core.js` — lifecycle, viewport, `fitToLegs`, and map-click
+    arbitration: a charting tool claims the click first (`isToolActive()`),
+    otherwise the click is delegated to the route editor (drops a waypoint).
     `fitBounds` is called by `passage-run.js`, **not** by a layer: layers
     must never steal the viewport.
   - `layer-registry.js` — the ONLY place Leaflet layers are added/removed.
@@ -178,8 +189,51 @@ Beneteau Oceanis Clipper 393. Polar: ORC-certified same-model proxy
   once drawn into one group behind one checkbox, which made the fine
   coastline impossible to assess on its own. Do not re-merge them.
 
+### Drawn route: the skipper's rough course
+The rough course is drawn by hand, not generated. The flow and its modules:
+- `src/core/route-model.js` — the pure route data model (no DOM/Leaflet, runs
+  in Node and `server/`). Waypoints carry a **stable id**; notes/leg-notes are
+  keyed by id, never array index, so insert/delete never re-labels a note.
+  Optional intent fields (`name`, `note`, `legNotes`, `history`) — a bare
+  route is just `format`/`version`/`waypoints`. `history` records
+  add/insert/move/remove/note/suggest/import ops (moves coalesce per drag,
+  capped 1000) so we can later study how a course was refined. `toWaypoints()`
+  yields the plain `[{lat,lon}]` the engine consumes.
+- `src/core/route-io.js` — pure GPX/CSV converters for nav-system interop.
+  GPX uses the same `<rtept>` dialect `tools/rough-route-gpx.mjs` parses, and
+  embeds the full route JSON in `<extensions>` for loss-free re-import.
+- `src/services/route-store.js` — debounced localStorage autosave
+  (`srp.route.v1`), drop-and-warn on version mismatch (settings-store pattern).
+- `src/ui/route-editor.js` — the map interaction: numbered draggable waypoints
+  and per-leg polylines, click-a-leg-to-insert. Owns its **own** `L.layerGroup`
+  (NOT the registry — registry builders are pure and rebuild on state change,
+  which fights live drag state). Reports every edit via `onRouteChanged`.
+- `src/ui/route-panel.js` — the Route panel: leg table, totals, magnetic
+  variation, notes (one-tap intent capture), and actions (Suggest, Reverse,
+  Clear route, Export GPX/CSV, Import). `src/ui/app.js` wires these together.
+
+### The rough-route seam (`planPassage`)
+`planPassage(input)` takes an optional `input.roughRoute` (`[{lat,lon}]`, ≥2).
+When present it **bypasses `computeRoughRoute`** and calls
+`assessProvidedRoute` (rough-route.js) instead — same return shape, so the
+corridor/timeline/execution passes are unchanged, `start`/`end` come from the
+route endpoints, and `debug.roughRoute.provided` is set. Drawn-route legs are
+crossing-tested at **clearance 0** (the skipper chose the offing; the coarse
+rings fill rivers in as land, so a margin test would false-positive on real
+harbour approaches). A crossing is a **warning, not a block** — Pass 2 against
+the fine tiles plus the `ARRIVAL_SHORTFALL_NM` note is the real gate.
+`server/plan-route.js` accepts the same `roughRoute` for MCP parity.
+
+### Charting overlays
+- OpenSeaMap seamarks are a **registry layer** (`layers/chart-layers.js`,
+  group "Charts", `dependsOn: []`), toggled from the Layers panel — not a tool.
+- `charting-tools.js` (ruler, measuring bar) owns its own Leaflet objects and
+  exposes `isToolActive()` for the map-click arbitration. Draggable handles use
+  `L.marker` + a divIcon, never `L.circleMarker` — Leaflet silently ignores
+  `draggable` on circle markers (the old bar endpoints never actually moved).
+  A future refactor may split this into a per-tool `tool-manager` framework.
+
 ## Coding Rules
-- Follow `coding-constitution.yaml` in full
 - One file, one responsibility; soft ceiling ~150 lines
 - Pure logic never touches DOM, fetch, or file I/O
 - Complete files always, never partial diffs
@@ -284,15 +338,19 @@ short route as a passage to the destination.
 
 ### Two-tier routing: rough course, then sail the corridor
 The greedy isochrone alone wandered (up rivers, round headlands). It is now
-wrapped by a rough-course first pass, modelled on how a skipper works:
-1. **Rough course** — `src/core/rough-route.js` `computeRoughRoute`. A shortest
-   path across a VISIBILITY GRAPH over the **coarse** land (which fills rivers
-   in, so the string can't go up one). Nodes are coarse-ring corners near the
-   passage, nudged into open water; edges are clear-water `crossesLand` tests;
-   Dijkstra finds the taut string. One leg in open water (fixes the 36-heading
-   wobble); rounds headlands like the skipper's own GPX. Also used verbatim by
-   **route-only mode** (`passage-run.js`), so route-only no longer runs the
-   greedy router.
+wrapped by a rough-course first pass. **The rough course is normally the one
+the skipper drew** (`roughRoute` → `assessProvidedRoute`, see "The rough-route
+seam" above); the generator below is the fallback and the "Suggest route" seed:
+1. **Rough course** — `src/core/rough-route.js`. `computeRoughRoute` is a
+   shortest path across a VISIBILITY GRAPH over the **coarse** land (which fills
+   rivers in, so the string can't go up one). Nodes are coarse-ring corners near
+   the passage, nudged into open water; edges are clear-water `crossesLand`
+   tests; Dijkstra finds the taut string. One leg in open water (fixes the
+   36-heading wobble); rounds headlands like the skipper's own GPX. Its
+   counterpart `assessProvidedRoute` takes a drawn course as-is (no generation),
+   returning the same shape so the rest of the planner reads them identically.
+   **Route-only mode** (`passage-run.js`) now assesses the *drawn* route (no
+   generation, no wind), showing its legs plus any land-crossing warning.
 2. **Corridor** — `src/core/route-corridor.js`. The rough polyline + a
    half-width (`CORRIDOR_WIDTH_NM = 3`). `router.js` rejects any candidate whose
    lateral offset exceeds it, so the sailing isochrone can't divert off the
@@ -416,10 +474,10 @@ enormously:
   `planPassage()` end-to-end (6 scenarios: light air, long beam reach,
   short wind window, final-approach override, solo-vs-crewed hassle,
   reef trigger)
-- `tests/rough-route-harness.mjs` — The rough-course engine (5 scenarios):
+- `tests/rough-route-harness.mjs` — The rough-course engine (9 scenarios):
   open water is one leg (Issue 2), the course clears the coast and rounds the
-  Lizard, tracks the skipper's GPX within tolerance, and never enters the
-  Helford.
+  Lizard, tracks the skipper's GPX within tolerance, never enters the Helford,
+  and the harbour-clearance split lets an estuary berth escape at a wide margin.
 - `tests/wind-interpolation-harness.mjs` — The wind field (8 scenarios). Guards
   the nearest-neighbour regression: asserts the field is smooth (no >5° step
   across a 356°→234° contrast), that space blends and wraps through north, that
@@ -432,18 +490,27 @@ enormously:
   then releases at 3.5kn; a refused change does not latch the engine out;
   final approach bypasses the band; comfort ceiling warns without
   rerouting.
+- `tests/route-model-harness.mjs` — The drawn-route model and IO (27 checks):
+  id-stable annotations across insert/delete, history coalescing/cap, serialize
+  and GPX/CSV round-trips (incl. against the `tools/` GPX parser).
+- `tests/provided-route-harness.mjs` — The rough-route seam (7 checks):
+  `assessProvidedRoute` flags a land-crossing drawn route, and `planPassage`
+  with a `roughRoute` follows the drawn spine and marks `debug.roughRoute.provided`.
 - `tests/api.mjs` — Boots `server/index.js` on an ephemeral port with a
   stubbed wind fetch, exercises `/health` and `/plan-route` (valid
-  request, validation errors, debug flag)
+  request, validation errors, debug flag, and a `roughRoute` request)
 - `tests/all.mjs` — Runs everything; must pass before any task is done
 Tests always call real production functions, never reimplementations.
 
 ## Current State
-Phase 1 prototyping. All test suites green as of 2026-07-16. Executing
-`build-plan.md`: WS1 engine fixes (done) → WS2 comfort rewrite (done)
-→ WS3 API (done) → WS5 OSM coastline swap (done) → WS4 tidal → WS6
-UI/docs. Testing against the live GitHub Pages build. Commit directly
-to main after each meaningful change — no branches, no PRs.
+Phase 1 prototyping. All test suites green. Pivot to skipper-drawn routes
+shipped: the map now has a route editor (draw → Create Sailing Plan), the
+engine takes a provided `roughRoute`, routes autosave to localStorage and
+export/import as GPX/CSV, and an OpenSeaMap seamark overlay was added. The
+auto-generator remains as "Suggest route". Remaining engine backlog: WS4
+tidal, and the light-air over-tack cost function below. Testing against the
+live GitHub Pages build. Commit directly to main after each meaningful
+change — no branches, no PRs.
 
 **Known open issue (not yet fixed):** with a small `timeStepMinutes`
 (e.g. 15) the isochrone router can dither indefinitely near the arrival
