@@ -6,7 +6,7 @@ import { planConfigurations } from './config-planner.js';
 import { executeBlocks } from './passage-block-executor.js';
 import { buildDecisions } from './passage-decisions.js';
 import { findUncomfortableLegs, markUncomfortableLegs } from './comfort-warnings.js';
-import { computeRoughRoute } from './rough-route.js';
+import { computeRoughRoute, assessProvidedRoute } from './rough-route.js';
 import { makeCorridor, pruneCoastlineToCorridor } from './route-corridor.js';
 import { buildTimelineAlongRoute } from './route-timeline.js';
 import {
@@ -38,41 +38,59 @@ const DEFAULT_ROUTER_OPTS = {
 
 export async function planPassage(input) {
   const {
-    start, end, departureTime, basePolars, windGrid,
+    departureTime, basePolars, windGrid,
     tidalData = null, comfortParams, coastlineCoarse,
-    getFineCoastline, routerOpts
+    getFineCoastline, routerOpts, roughRoute
   } = input;
 
   const params = mergeComfortParams(comfortParams || {});
   const opts = { ...DEFAULT_ROUTER_OPTS, ...(routerOpts || {}) };
   const requestedClearanceNm = opts.clearanceMarginNm;
 
-  // Pass 1 — the rough course: a taut geometric string around the coarse land,
-  // which fills rivers in, so it never heads up a dead end. Relax the clearance
-  // only if the course can't be drawn at the requested margin (a tight harbour).
-  const harbourClearanceNm = opts.harbourClearanceNm ?? 0;
-  const harbourZoneNm = opts.harbourZoneNm ?? null;
-  const roughOpts = (clearanceNm) => ({ clearanceNm, harbourClearanceNm, harbourZoneNm });
+  const planningNotes = [];
   let effectiveClearanceNm = requestedClearanceNm;
-  let rough = computeRoughRoute(start, end, coastlineCoarse, roughOpts(effectiveClearanceNm));
-  for (const fallback of NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM) {
-    if (rough.reachedCleanly || fallback >= effectiveClearanceNm) continue;
-    effectiveClearanceNm = fallback;
+  let rough;
+
+  if (Array.isArray(roughRoute) && roughRoute.length >= 2) {
+    // The skipper drew the rough course. Take it as the truth and only assess it;
+    // start/end come from its endpoints, not the input.
+    rough = assessProvidedRoute(roughRoute, coastlineCoarse, { clearanceNm: 0 });
+    if (!rough.reachedCleanly) {
+      planningNotes.push(
+        `Your drawn route crosses the coarse coastline on ${rough.crossingLegIndices.length} leg(s) — the sailing pass may not find a clean route there. Check those legs against the chart.`
+      );
+    }
+  } else {
+    // Pass 1 — the rough course: a taut geometric string around the coarse land,
+    // which fills rivers in, so it never heads up a dead end. Relax the clearance
+    // only if the course can't be drawn at the requested margin (a tight harbour).
+    const start = input.start, end = input.end;
+    const harbourClearanceNm = opts.harbourClearanceNm ?? 0;
+    const harbourZoneNm = opts.harbourZoneNm ?? null;
+    const roughOpts = (clearanceNm) => ({ clearanceNm, harbourClearanceNm, harbourZoneNm });
     rough = computeRoughRoute(start, end, coastlineCoarse, roughOpts(effectiveClearanceNm));
-    if (rough.reachedCleanly) break;
+    for (const fallback of NARROW_HARBOUR_CLEARANCE_FALLBACKS_NM) {
+      if (rough.reachedCleanly || fallback >= effectiveClearanceNm) continue;
+      effectiveClearanceNm = fallback;
+      rough = computeRoughRoute(start, end, coastlineCoarse, roughOpts(effectiveClearanceNm));
+      if (rough.reachedCleanly) break;
+    }
+
+    if (effectiveClearanceNm < requestedClearanceNm) {
+      planningNotes.push(
+        `Coastal clearance reduced from ${requestedClearanceNm}NM to ${effectiveClearanceNm}NM to draw the rough course (narrow harbour approach or a close-in destination). Check the pilot book for this stretch.`
+      );
+    }
+    if (!rough.reachedCleanly) {
+      planningNotes.push(
+        `The rough course still crosses land on ${rough.crossingLegIndices.length} leg(s) even at ${effectiveClearanceNm}NM clearance — the sailing pass may not find a clean route.`
+      );
+    }
   }
 
-  const planningNotes = [];
-  if (effectiveClearanceNm < requestedClearanceNm) {
-    planningNotes.push(
-      `Coastal clearance reduced from ${requestedClearanceNm}NM to ${effectiveClearanceNm}NM to draw the rough course (narrow harbour approach or a close-in destination). Check the pilot book for this stretch.`
-    );
-  }
-  if (!rough.reachedCleanly) {
-    planningNotes.push(
-      `The rough course still crosses land on ${rough.crossingLegIndices.length} leg(s) even at ${effectiveClearanceNm}NM clearance — the sailing pass may not find a clean route.`
-    );
-  }
+  // start/end are the course endpoints, whether drawn or generated.
+  const start = rough.waypoints[0];
+  const end = rough.waypoints[rough.waypoints.length - 1];
 
   const fineOpts = { ...opts, clearanceMarginNm: effectiveClearanceNm };
   const corridorWidthNm = opts.corridorWidthNm ?? 3;
@@ -153,7 +171,8 @@ export async function planPassage(input) {
         legCount: rough.legCount,
         totalDistanceNm: rough.totalDistanceNm,
         reachedCleanly: rough.reachedCleanly,
-        nodeCount: rough.nodeCount
+        nodeCount: rough.nodeCount,
+        provided: !!rough.provided
       },
       corridorWidthNm,
       clearanceUsedNm: effectiveClearanceNm
