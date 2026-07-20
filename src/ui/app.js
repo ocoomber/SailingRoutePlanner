@@ -19,7 +19,7 @@ import { renderLayersPanel } from './layers-panel.js';
 import { showTrail, clearTrail, initTrailSync } from './trail-panel.js';
 import { subscribe, clearSelection } from './selection.js';
 import { setupTimeModeToggle, setDefaultDateTime } from './controls.js';
-import { showError, hideError, hideLog, showWarnings } from './status.js';
+import { showError, hideError, showWarnings } from './status.js';
 import { clearInspector } from './inspector.js';
 import { loadSettings, toRoutingOpts } from './settings-store.js';
 import { renderSettings } from './settings-view.js';
@@ -30,6 +30,11 @@ import { onViewportChanged, onCursorMove } from './viewport.js';
 import { onCreateSailingPlan } from './passage-run.js';
 import { initRouteEditor } from './route-editor.js';
 import { initRoutePanel, renderRoutePanel } from './route-panel.js';
+import { isDev } from './mode.js';
+import { download } from './download.js';
+import { initRoughRouteLab, refreshRoughRouteDiff } from './rough-route-lab.js';
+import { initPassageLogButton } from './passage-log-button.js';
+import { initReviewFlag } from './review-flag.js';
 
 let editor = null;
 
@@ -65,6 +70,7 @@ async function loadData() {
 function afterRouteChange(route) {
   saveRoute(route);
   renderRoutePanel(route);
+  if (isDev()) refreshRoughRouteDiff();
 }
 
 // "Clear plan" wipes the computed result and the trail, but NOT the drawn route —
@@ -76,7 +82,6 @@ function onClearPlan() {
   clearTrail();
   clearSelection();
   hideError();
-  hideLog();
   showWarnings(null);
   renderState.legs = null;
   renderState.decisions = null;
@@ -115,18 +120,6 @@ function onSuggestRoute() {
   editor.setRoute(suggested);
   afterRouteChange(suggested);
   hideError();
-}
-
-function download(filename, text, mime) {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 function onExport(kind) {
@@ -176,8 +169,7 @@ function routePanelHandlers() {
     },
     onClearRoute: () => { clearRoute(); editor.clear(); },
     onSuggestRoute,
-    onExportGpx: () => onExport('gpx'),
-    onExportCsv: () => onExport('csv'),
+    onExport,
     onImportFile
   };
 }
@@ -188,7 +180,12 @@ async function init() {
   const map = initMap({ onViewportChanged, onCursorMove, onMapClick: (latlng) => editor.addWaypointAt(latlng) });
   editor = initRouteEditor(map, { onRouteChanged: afterRouteChange });
   initRegistry(map);
-  for (const def of LAYER_DEFS) registerLayer(def);
+  // The skipper UI carries only the layers a sailor needs (charts + route);
+  // every diagnostic overlay is dev-only. The panel then renders from whatever
+  // was registered, so it stays in step automatically.
+  for (const def of LAYER_DEFS) {
+    if (isDev() || def.userVisible) registerLayer(def);
+  }
   renderLayersPanel(() => renderState);
   clearInspector();
 
@@ -218,6 +215,14 @@ async function init() {
   initPanels();
   initViews({ onEnterSettings: renderSettings });
   showTrail([], [], null);
+
+  // Dev-only tooling (debug.html): the rough-route correction capture tool and
+  // the on-demand passage-log download. Both no-op if their DOM is absent.
+  if (isDev()) {
+    initRoughRouteLab({ editor, afterRouteChange });
+    initPassageLogButton();
+    initReviewFlag({ editor });
+  }
 
   try {
     await loadData();

@@ -14,8 +14,8 @@ export function initRoutePanel(h) {
   document.getElementById('route-suggest')?.addEventListener('click', () => handlers.onSuggestRoute?.());
   document.getElementById('route-reverse')?.addEventListener('click', () => handlers.onReverse?.());
   document.getElementById('route-clear')?.addEventListener('click', () => handlers.onClearRoute?.());
-  document.getElementById('route-export-gpx')?.addEventListener('click', () => handlers.onExportGpx?.());
-  document.getElementById('route-export-csv')?.addEventListener('click', () => handlers.onExportCsv?.());
+
+  initExportMenu();
 
   const importInput = document.getElementById('route-import-file');
   document.getElementById('route-import')?.addEventListener('click', () => importInput?.click());
@@ -33,6 +33,40 @@ export function initRoutePanel(h) {
   };
   varInput?.addEventListener('change', emitVar);
   varSign?.addEventListener('change', emitVar);
+}
+
+// One "Export route ▾" control opening a menu of formats, so adding a format is a
+// new menu item rather than another button crowding the panel.
+function initExportMenu() {
+  const wrap = document.getElementById('route-export');
+  const btn = document.getElementById('route-export-btn');
+  const menu = document.getElementById('route-export-menu');
+  if (!wrap || !btn || !menu) return;
+
+  const close = () => {
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onDocClick, true);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onDocClick = (e) => { if (!wrap.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const open = () => {
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onDocClick, true);
+    document.addEventListener('keydown', onKey);
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.hidden ? open() : close();
+  });
+  menu.querySelectorAll('.route-export-opt').forEach(opt =>
+    opt.addEventListener('click', () => {
+      close();
+      handlers.onExport?.(opt.dataset.format);
+    }));
 }
 
 export function renderRoutePanel(route) {

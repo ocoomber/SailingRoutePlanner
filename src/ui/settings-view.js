@@ -5,6 +5,13 @@ import { SETTINGS_GROUPS } from './settings-schema.js';
 import { getValue, setValue, defaultFor, isChanged, resetField, resetAll, changedCount } from './settings-store.js';
 import { mergeComfortParams } from '../core/comfort-params.js';
 import { toComfortParams } from './settings-store.js';
+import { isDev } from './mode.js';
+
+// The user page hides pure router internals (time step, min heading change,
+// heading resolution). Corridor width and every clearance/comfort setting stay.
+function visibleFields(group) {
+  return group.fields.filter(f => isDev() || !f.devOnly);
+}
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -124,10 +131,12 @@ export function renderSettings() {
   container.appendChild(summary);
 
   for (const group of SETTINGS_GROUPS) {
+    const fields = visibleFields(group);
+    if (fields.length === 0) continue;
     const section = el('section', 'settings-group');
     section.appendChild(el('h2', 'settings-group-title', group.title));
     section.appendChild(el('p', 'settings-group-blurb', group.blurb));
-    for (const field of group.fields) {
+    for (const field of fields) {
       section.appendChild(buildField(field, rerender));
     }
     container.appendChild(section);

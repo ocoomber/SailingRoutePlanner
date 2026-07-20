@@ -23,7 +23,8 @@ export const LAYER_DEFS = [
     description: 'Buoys, lights, depth contours and traffic-separation marks from OpenSeaMap — the chart detail for judging clearance while you draw the course.',
     group: 'Charts',
     swatch: SEAMARK_SWATCH,
-    defaultOn: false,
+    defaultOn: true,
+    userVisible: true,
     dependsOn: [],
     build: buildSeamarks
   },
@@ -94,6 +95,7 @@ export const LAYER_DEFS = [
     group: 'Route',
     swatch: configLegend(),
     defaultOn: true,
+    userVisible: true,
     dependsOn: ['legs', 'colourBy'],
     build: buildRouteLegs,
     applySelection: applyRouteSelection
@@ -105,6 +107,7 @@ export const LAYER_DEFS = [
     group: 'Route',
     swatch: '#2563eb',
     defaultOn: true,
+    userVisible: true,
     dependsOn: ['legs'],
     build: buildManeuverMarkers
   },
@@ -125,6 +128,7 @@ export const LAYER_DEFS = [
     group: 'Route',
     swatch: '#6b21a8',
     defaultOn: true,
+    userVisible: true,
     dependsOn: ['legs'],
     build: buildWindArrows
   },

@@ -142,12 +142,29 @@ Beneteau Oceanis Clipper 393. Polar: ORC-certified same-model proxy
   "not loaded". **Regenerate with `node tools/generate-tiles.mjs`
   whenever the coastline source changes.**
 
-### UI structure (debug tool, map-first)
-- `index.html` holds two full-screen views: `#view-map` and
-  `#view-settings`, switched by URL hash via `src/ui/views.js`. One
-  document on purpose — a separate settings page would re-fetch the
-  polars and coarse coastline, discard every loaded detail tile, and lose
-  the map position and computed route.
+### Two UIs: user (`index.html`) vs dev (`debug.html`)
+Two HTML entry files share **one** `src/ui/app.js` — they differ only in their
+static shell and a `<body data-mode>` flag (`user` / `dev`), never in duplicated
+logic. `src/ui/mode.js` (`isDev()`) reads the flag; everything mode-varying is
+data/flag driven:
+- **Layers**: `layer-defs.js` marks skipper-relevant defs `userVisible: true`
+  (charts + route legs/maneuvers/wind); `app.js` registers the rest only in dev.
+  The land/tile/decision overlays are dev-only.
+- **Settings**: `settings-schema.js` marks the pure router internals
+  (`timeStep`, `headingThreshold`, `headingsPerStep`) `devOnly: true`;
+  `settings-view.js` filters them out for the user. Corridor width, all clearances
+  and every comfort setting stay on the user page. The store is unchanged — hidden
+  fields just keep their engine defaults.
+- **Controls/panels**: the user shell omits the route-only toggle, colour-by,
+  tile stats, inspector bar and the dev log panels. Shared JS null-guards every
+  such element (e.g. `controls.getInputs()` reads `#geometry-mode?.checked`), and
+  `panels.js` filters absent panel ids, so the slim DOM just works.
+- `debug.html` adds the two dev logging tools (see "Logging" below).
+
+Each file still holds two full-screen views (`#view-map`, `#view-settings`),
+switched by URL hash via `src/ui/views.js` — one document per UI on purpose: a
+separate settings page would re-fetch the polars and coarse coastline, discard
+every loaded detail tile, and lose the map position and computed route.
 - Floating panels (Route, Layers, Decision trail) are **siblings of `#map`,
   never children**: as children, every click on a panel also reaches Leaflet
   and would drop a waypoint. They sit at `--z-panel: 1100` to clear
@@ -378,9 +395,10 @@ sailing isochrone inside it is still greedy best-first on
 light/variable-wind beat (e.g. Falmouth→Penzance in real forecast wind) it
 produces many short tacks (100+ legs) and takes tens of seconds. That is a
 distinct problem from the wander — it needs a real cost function (A*-style
-elapsed time + admissible heuristic) and stronger light-air tack damping. Use
-`logs/route-latest.json` (leg-by-leg wind/tack/config) to diagnose. Do not paper
-over it with clearance or corridor tweaks.
+elapsed time + admissible heuristic) and stronger light-air tack damping. Use the
+dev **Download passage log** button (debug.html) for the leg-by-leg
+wind/tack/config JSON to diagnose. Do not paper over it with clearance or
+corridor tweaks.
 
 ### Endpoint clearance (leaving/entering a harbour)
 Coastal passages always start and end near land, so clearance must relax there.
@@ -391,15 +409,32 @@ cutting through land. **`router.js` expansion must pass BOTH `start` and `end`**
 destination was unreachable — stalled ~0.8NM off). Default coastal clearance is
 `0.25` NM (`ROUTING_DEFAULTS`, `DEFAULT_ROUTER_OPTS`).
 
-### Debug log is a file, not the on-screen panel
-Every route POSTs a structured JSON log to `POST /debug-log`
-(`src/services/debug-log.js` → `server/index.js`), written to
-`logs/route-latest.json` (+ timestamped copy, `logs/` gitignored). Assembled by
-the pure `src/core/route-log.js`. **Read that file to debug a route** — the user
-does not copy/paste. This is why `start.cmd` now runs `node server/index.js`
-(serves the app AND receives logs) instead of a static server. The server's
-entry check uses `pathToFileURL(process.argv[1])` so it actually listens on
-Windows (the old `file://${argv[1]}` never matched).
+### Logging: three dev tools, no auto-save
+The old "POST a big passage JSON on every run to `logs/route-latest.json`" system
+is **gone** (`src/services/debug-log.js` deleted, `POST /debug-log` removed). Three
+dev-mode tools replace it, all **debug.html only**. The two file-writing ones share
+`src/services/dev-log.js` (`postDevLog(endpoint, {markdown, record})`, download
+fallback) and a single server factory `devLogHandler(subdir, jsonl)` that writes a
+readable `<ts>.md` per entry and appends the record to a JSONL dataset:
+- **Download passage log** (`src/ui/passage-log-button.js`): assembles the full
+  sailing-pass JSON on demand from `renderState.lastRun` (stashed by
+  `passage-run.js`) via the still-pure `src/core/route-log.js`, and downloads it.
+  Produced only when asked, not on every run.
+- **Rough-route log** — the generator got it wrong (`src/ui/rough-route-lab.js`):
+  generate the app's rough route, edit it, say why, Save. `src/core/rough-route-log.js`
+  (pure) diffs baseline vs edited route + reads the route's own edit `history`.
+  `POST /rough-route-log` → `logs/rough-route/<ts>.md` + `rough-route-corrections.jsonl`
+  — a corpus for hardening `computeRoughRoute`.
+- **Flag plan for review** — the plan came out wrong, e.g. sailed over land
+  (`src/ui/review-flag.js`): captures the drawn rough route + the sailing plan it
+  produced + a note. `src/core/review-log.js` (pure) wraps the passage log.
+  `POST /review-log` → `logs/review/<ts>.md` + `review-flags.jsonl` — failing
+  cases to turn into regression fixtures.
+
+**Read the `.md` files / `.jsonl` to see where the planner is wrong.** `start.cmd`
+still runs `node server/index.js` so the server serves the app AND receives these
+logs; its entry check uses `pathToFileURL(process.argv[1])` so it listens on
+Windows.
 
 ### Wind field interpolation (`src/core/wind-interpolation.js`)
 The forecast is a **4x4 lattice** (`samplePoints(area, 4)` in `services/wind.js`)

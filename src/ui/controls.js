@@ -9,7 +9,7 @@ export function getInputs() {
     departureDate: document.getElementById('departure-date').value,
     departureTime: document.getElementById('departure-time').value,
     timeMode: document.querySelector('input[name="time-mode"]:checked').value,
-    geometryMode: document.getElementById('geometry-mode').checked,
+    geometryMode: document.getElementById('geometry-mode')?.checked ?? false,
     timeStep: routing.timeStep,
     headingThreshold: routing.headingThreshold,
     clearanceMargin: routing.clearanceMargin,
