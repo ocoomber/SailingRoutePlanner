@@ -1,5 +1,5 @@
 import express from 'express';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, appendFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { fetchWindGrid } from '../src/services/wind.js';
@@ -8,6 +8,7 @@ import { createPlanRouteHandler } from './plan-route.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const LOG_DIR = join(ROOT, 'logs');
+const ROUGH_DIR = join(LOG_DIR, 'rough-route');
 
 export function createServer({ fetchWindGridFn = fetchWindGrid } = {}) {
   const app = express();
@@ -16,17 +17,21 @@ export function createServer({ fetchWindGridFn = fetchWindGrid } = {}) {
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
   app.post('/plan-route', createPlanRouteHandler(fetchWindGridFn));
 
-  // Every route the browser computes POSTs its structured debug log here, so the
-  // coding assistant can read logs/route-latest.json instead of the user pasting
-  // anything. A timestamped copy keeps a short history.
-  app.post('/debug-log', (req, res) => {
+  // The dev "rough-route correction" tool POSTs { markdown, record } here: the
+  // app generated a rough route, the skipper corrected it and said why. We keep
+  // a readable Markdown file per correction AND append the record to a JSONL
+  // dataset, so the corrections become a corpus for hardening computeRoughRoute.
+  app.post('/rough-route-log', (req, res) => {
     try {
-      mkdirSync(LOG_DIR, { recursive: true });
-      const json = JSON.stringify(req.body, null, 2);
-      writeFileSync(join(LOG_DIR, 'route-latest.json'), json);
+      const { markdown, record } = req.body || {};
+      if (typeof markdown !== 'string' || !record) {
+        return res.status(400).json({ ok: false, error: 'expected { markdown, record }' });
+      }
+      mkdirSync(ROUGH_DIR, { recursive: true });
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      writeFileSync(join(LOG_DIR, `route-${stamp}.json`), json);
-      res.json({ ok: true });
+      writeFileSync(join(ROUGH_DIR, `${stamp}.md`), markdown);
+      appendFileSync(join(LOG_DIR, 'rough-route-corrections.jsonl'), JSON.stringify(record) + '\n');
+      res.json({ ok: true, file: `logs/rough-route/${stamp}.md` });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }

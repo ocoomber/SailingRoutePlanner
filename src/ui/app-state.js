@@ -13,7 +13,8 @@ export const renderState = {
   bounds: null,
   tileZoom: 12,
   tileEpoch: 0,
-  colourBy: 'config'
+  colourBy: 'config',
+  lastRun: null   // dev-only: raw material for the "Download passage log" button
 };
 
 let polars = null;

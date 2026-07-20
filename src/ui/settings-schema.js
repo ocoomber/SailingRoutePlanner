@@ -203,6 +203,7 @@ export const SETTINGS_GROUPS = [
         step: 5,
         min: 5,
         max: 60,
+        devOnly: true,
         description: 'How often the router re-decides a heading. Smaller means a more detailed, slower search; larger is faster and coarser.'
       },
       {
@@ -212,6 +213,7 @@ export const SETTINGS_GROUPS = [
         step: 5,
         min: 5,
         max: 45,
+        devOnly: true,
         description: 'Heading changes smaller than this are merged into the previous leg rather than creating a new one. Raise it for fewer, longer legs.'
       },
       {
@@ -257,6 +259,7 @@ export const SETTINGS_GROUPS = [
         step: 4,
         min: 8,
         max: 72,
+        devOnly: true,
         description: 'How many candidate headings the router tries at each step (36 = every 10°). More gives smoother, better-optimised courses but a slower search; fewer is faster and coarser. Sailing mode only.'
       }
     ]

@@ -5,15 +5,13 @@ import { getRoute } from './route-editor.js';
 import { toWaypoints, isPlannable } from '../core/route-model.js';
 import { planPassageForBrowser } from '../services/passage-service.js';
 import { mergeComfortParams } from '../core/comfort-params.js';
-import { buildRouteLog } from '../core/route-log.js';
-import { postDebugLog } from '../services/debug-log.js';
 import { renderState, getPolars, getCoastlineManager, redraw } from './app-state.js';
 import { fitToLegs } from './map/map-core.js';
 import { buildTrailCards, destinationOf, collectRejectedDecisions } from './trail-cards.js';
 import { showTrail, clearTrail } from './trail-panel.js';
 import { clearSelection } from './selection.js';
 import { getInputs, validateInputs } from './controls.js';
-import { showError, hideError, showLoading, hideLoading, showLog, hideLog, showWarnings } from './status.js';
+import { showError, hideError, showLoading, hideLoading, showWarnings } from './status.js';
 import { toComfortParams, toRoutingOpts } from './settings-store.js';
 
 // Route-only mode shows the drawn course itself — the legs the skipper laid
@@ -68,7 +66,6 @@ export async function onCreateSailingPlan() {
   }
 
   hideError();
-  hideLog();
   clearSelection();
   showLoading();
 
@@ -113,16 +110,15 @@ export async function onCreateSailingPlan() {
     hideLoading();
     showWarnings(warnings);
 
-    // Write the structured debug log to a file (for the coding assistant to read
-    // straight from logs/route-latest.json — no copy/paste).
-    const settings = { ...toRoutingOpts(), comfort: comfortParams };
-    const routeLog = buildRouteLog({
+    // Stash the raw material for this run so the dev-only "Download passage log"
+    // button (debug.html) can assemble the full passage JSON on demand. No auto
+    // POST any more — the rough-route correction tool is the everyday log.
+    renderState.lastRun = {
       mode: inputs.geometryMode ? 'route-only' : 'sailing',
-      inputs, settings, rough, passage, elapsedMs: Date.now() - t0
-    });
-    postDebugLog(routeLog).then(saved => showLog(saved
-      ? 'Debug log saved to logs/route-latest.json'
-      : 'Debug log not saved — run start.cmd (node server) to capture route logs.'));
+      inputs,
+      settings: { ...toRoutingOpts(), comfort: comfortParams },
+      rough, passage, elapsedMs: Date.now() - t0
+    };
 
     if (!legs || legs.length === 0) {
       showError('No route found — check the coastline is passable between these points, or loosen the coastal clearance in Settings.');

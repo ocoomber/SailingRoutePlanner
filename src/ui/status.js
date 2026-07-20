@@ -32,19 +32,6 @@ export function hideLoading() {
   if (overlay) overlay.remove();
 }
 
-export function showLog(logText) {
-  const pre = document.getElementById('debug-log-content');
-  const panel = document.getElementById('debug-log');
-  if (!pre || !panel) return;
-  panel.classList.remove('hidden');
-  pre.textContent = logText;
-}
-
-export function hideLog() {
-  const panel = document.getElementById('debug-log');
-  if (panel) panel.classList.add('hidden');
-}
-
 export function showWarnings(warnings) {
   const box = document.getElementById('passage-warnings');
   if (!box) return;

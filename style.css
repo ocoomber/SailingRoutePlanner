@@ -412,16 +412,31 @@ body {
   padding: 0.25rem 0.4rem; margin-bottom: 0.3rem; border-radius: 0 4px 4px 0;
 }
 
-#debug-log { margin-top: 0.6rem; }
-#debug-log summary {
-  cursor: pointer; color: var(--color-muted); font-size: 0.7rem;
-  text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0;
+/* ---------- dev tooling (debug.html) ---------- */
+
+.mode-badge {
+  align-self: flex-start; margin-top: 0.15rem;
+  font-size: 0.55rem; font-weight: 700; letter-spacing: 0.08em;
+  background: #b45309; color: #fff; padding: 0.05rem 0.3rem; border-radius: 3px;
 }
-#debug-log pre {
-  background: #1a1a2e; color: #e2e8f0; padding: 0.5rem;
-  border-radius: var(--radius); font-size: 0.62rem; line-height: 1.4;
-  white-space: pre-wrap; word-wrap: break-word; max-height: 260px; overflow-y: auto;
+
+.dev-log-actions { margin-top: 0.6rem; }
+
+.rrlab-readout {
+  font-size: 0.72rem; color: var(--color-muted);
+  margin: 0.3rem 0; line-height: 1.35;
 }
+.rrlab-reason-label {
+  display: block; margin-top: 0.4rem; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted);
+}
+.rrlab-reason {
+  width: 100%; margin-top: 0.25rem; box-sizing: border-box;
+  font: inherit; font-size: 0.78rem; padding: 0.4rem;
+  border: 1px solid var(--color-border, #d1d5db); border-radius: var(--radius);
+  resize: vertical;
+}
+.rrlab-status { font-size: 0.72rem; color: #16a34a; margin-top: 0.3rem; min-height: 1rem; }
 
 /* ---------- map tooltips ---------- */
 
@@ -588,7 +603,8 @@ body {
   }
   .fab-route  { left: 0; top: 22%; border-radius: 0 var(--radius) var(--radius) 0; }
   .fab-layers { left: 0; top: 52%; border-radius: 0 var(--radius) var(--radius) 0; }
-  .fab-trail  { right: 0; border-radius: var(--radius) 0 0 var(--radius); }
+  .fab-trail  { right: 0; top: 22%; border-radius: var(--radius) 0 0 var(--radius); }
+  .fab-rrlab  { right: 0; top: 62%; border-radius: var(--radius) 0 0 var(--radius); }
 
   .panel-backdrop {
     position: fixed;

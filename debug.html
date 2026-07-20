@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sailing Passage Planner</title>
+  <title>Sailing Passage Planner — Debug Tool</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body data-mode="user">
+<body data-mode="dev">
   <!-- MAP VIEW -->
   <div id="view-map" class="view">
     <header class="command-bar">
       <div class="command-brand">
         <strong>Passage Planner</strong>
         <span class="build-number"><!--BUILD_NUMBER--></span>
+        <span class="mode-badge">DEV</span>
       </div>
 
       <div class="command-group">
@@ -27,10 +28,17 @@
         <input type="time" id="departure-time" step="900">
       </div>
 
+      <div class="command-group">
+        <label class="checkbox-inline" title="Skip the sailing logic and wind fetch — geometry only">
+          <input type="checkbox" id="geometry-mode">
+          Route-only
+        </label>
+      </div>
+
       <div class="command-actions">
         <button id="calculate-btn" class="primary-btn">Create Sailing Plan</button>
         <button id="clear-btn" class="secondary-btn">Clear plan</button>
-        <a href="#/settings" class="gear-btn" title="Settings — comfort &amp; passage parameters">⚙</a>
+        <a href="#/settings" class="gear-btn" title="Settings — all comfort &amp; router parameters">⚙</a>
       </div>
     </header>
 
@@ -77,6 +85,21 @@
         </div>
         <div class="panel-body">
           <div id="layers-content"></div>
+          <section class="layer-group">
+            <h3 class="layer-group-title">Route colour</h3>
+            <div class="layer-row">
+              <select id="colour-by">
+                <option value="config">Colour by sail config</option>
+                <option value="tack">Colour by tack</option>
+              </select>
+              <p class="layer-description">What the leg colours mean.</p>
+            </div>
+          </section>
+          <section class="layer-group">
+            <h3 class="layer-group-title">Tile loading</h3>
+            <p id="tile-stats" class="tile-stats">Detail tiles loaded: 0</p>
+            <p class="hint">Detail tiles load automatically for the visible map area. The bar under the map shows which land source resolves at the cursor.</p>
+          </section>
         </div>
       </aside>
 
@@ -89,8 +112,36 @@
           <div id="status-box" class="status-box hidden"></div>
           <div id="passage-warnings" class="passage-warnings hidden"></div>
           <div id="trail-content"></div>
+          <div class="dev-log-actions">
+            <button id="download-passage-log" class="route-action" title="Download the full sailing-pass diagnostics for the last plan">Download passage log</button>
+          </div>
         </div>
       </aside>
+
+      <!-- DEV: rough-route correction capture. Generate the app's rough course,
+           edit it, say why, and save a correction the algorithm can learn from. -->
+      <aside class="floating-panel panel-rrlab" id="rrlab-panel">
+        <div class="panel-head">
+          <h2>Rough-route log</h2>
+          <button type="button" class="panel-collapse" data-panel="rrlab-panel">−</button>
+        </div>
+        <div class="panel-body">
+          <p class="hint">Drop a start + end, generate the app's rough route, edit it, say why, then save the correction.</p>
+          <div class="route-actions">
+            <button id="rrlab-generate" class="route-action" title="Generate the app's rough route between the current start and end as a baseline">Generate rough route</button>
+          </div>
+          <p id="rrlab-baseline" class="rrlab-readout">No baseline yet — set a start + end, then Generate.</p>
+          <p id="rrlab-diff" class="rrlab-readout"></p>
+          <label class="rrlab-reason-label" for="rrlab-reason">Why did you change it?</label>
+          <textarea id="rrlab-reason" class="rrlab-reason" rows="3" placeholder="e.g. the generated course cut inside the Manacles; I took it north of the rocks"></textarea>
+          <div class="route-actions">
+            <button id="rrlab-save" class="route-action" title="Save the correction (server file + dataset, or download)">Save log</button>
+          </div>
+          <p id="rrlab-status" class="rrlab-status"></p>
+        </div>
+      </aside>
+
+      <div id="inspector" class="inspector-bar"></div>
     </main>
 
     <!-- Mobile only: edge tabs slide the panels in from their side; the backdrop
@@ -99,6 +150,7 @@
     <button type="button" class="panel-fab fab-route" data-open="route-panel" aria-label="Open route panel">Route</button>
     <button type="button" class="panel-fab fab-layers" data-open="layers-panel" aria-label="Open layers menu">Layers</button>
     <button type="button" class="panel-fab fab-trail" data-open="trail-panel" aria-label="Open decision trail">Trail</button>
+    <button type="button" class="panel-fab fab-rrlab" data-open="rrlab-panel" aria-label="Open rough-route log">Log</button>
     <div class="panel-backdrop" id="panel-backdrop"></div>
   </div>
 

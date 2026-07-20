@@ -29,7 +29,9 @@ jobs:
         run: |
           BUILD_NUM="${{ github.run_number }}"
           TIMESTAMP="$(date -u +'%Y-%m-%d %H:%M UTC')"
-          sed -i "s/<!--BUILD_NUMBER-->/Build ${BUILD_NUM} — ${TIMESTAMP}/" index.html
+          for f in index.html debug.html; do
+            sed -i "s/<!--BUILD_NUMBER-->/Build ${BUILD_NUM} — ${TIMESTAMP}/" "$f"
+          done
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
