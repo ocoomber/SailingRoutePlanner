@@ -34,6 +34,7 @@ import { isDev } from './mode.js';
 import { download } from './download.js';
 import { initRoughRouteLab, refreshRoughRouteDiff } from './rough-route-lab.js';
 import { initPassageLogButton } from './passage-log-button.js';
+import { initReviewFlag } from './review-flag.js';
 
 let editor = null;
 
@@ -168,8 +169,7 @@ function routePanelHandlers() {
     },
     onClearRoute: () => { clearRoute(); editor.clear(); },
     onSuggestRoute,
-    onExportGpx: () => onExport('gpx'),
-    onExportCsv: () => onExport('csv'),
+    onExport,
     onImportFile
   };
 }
@@ -221,6 +221,7 @@ async function init() {
   if (isDev()) {
     initRoughRouteLab({ editor, afterRouteChange });
     initPassageLogButton();
+    initReviewFlag({ editor });
   }
 
   try {

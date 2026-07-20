@@ -53,9 +53,14 @@
             <button id="route-clear" class="route-action" title="Delete the drawn route">Clear route</button>
           </div>
           <div class="route-actions">
-            <button id="route-export-gpx" class="route-action" title="Export as GPX for a chart plotter / nav system">Export GPX</button>
-            <button id="route-export-csv" class="route-action" title="Export as CSV">Export CSV</button>
-            <button id="route-import" class="route-action" title="Import a GPX or CSV route">Import…</button>
+            <div class="route-export" id="route-export">
+              <button type="button" id="route-export-btn" class="route-action" aria-haspopup="true" aria-expanded="false" title="Export the drawn route">Export route ▾</button>
+              <div class="route-export-menu" id="route-export-menu" hidden>
+                <button type="button" class="route-export-opt" data-format="gpx">GPX — chart plotter</button>
+                <button type="button" class="route-export-opt" data-format="csv">CSV</button>
+              </div>
+            </div>
+            <button type="button" id="route-import" class="route-action" title="Import a GPX or CSV route">Import…</button>
             <input type="file" id="route-import-file" accept=".gpx,.csv,.txt" hidden>
           </div>
           <div class="route-variation">

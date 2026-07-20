@@ -14,7 +14,7 @@ import { buildRoughRouteLog } from '../core/rough-route-log.js';
 import { createRoute, addWaypoint, toWaypoints, isPlannable } from '../core/route-model.js';
 import { getCoastlineManager } from './app-state.js';
 import { toRoutingOpts } from './settings-store.js';
-import { postRoughRouteLog } from '../services/rough-route-log.js';
+import { postDevLog } from '../services/dev-log.js';
 import { download } from './download.js';
 
 let editor = null;
@@ -116,7 +116,7 @@ async function onSave() {
     finalRoute: editor.getRoute(),
     reason: els?.reason?.value?.trim() || null
   });
-  const saved = await postRoughRouteLog({ markdown, record });
+  const saved = await postDevLog('/rough-route-log', { markdown, record });
   if (saved) {
     setStatus(`Saved ${typeof saved === 'string' ? saved : 'to the server'} (+ dataset row).`);
   } else {

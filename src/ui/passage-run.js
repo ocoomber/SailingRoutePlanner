@@ -115,7 +115,7 @@ export async function onCreateSailingPlan() {
     // POST any more — the rough-route correction tool is the everyday log.
     renderState.lastRun = {
       mode: inputs.geometryMode ? 'route-only' : 'sailing',
-      inputs,
+      inputs: { ...inputs, startLat: start.lat, startLon: start.lon, endLat: end.lat, endLon: end.lon },
       settings: { ...toRoutingOpts(), comfort: comfortParams },
       rough, passage, elapsedMs: Date.now() - t0
     };

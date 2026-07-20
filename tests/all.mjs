@@ -34,6 +34,7 @@ const coastlinePassed = run('Coastline system tests', 'coastline-system.mjs');
 const roughRoutePassed = run('Rough-route engine tests', 'rough-route-harness.mjs');
 const routeModelPassed = run('Drawn-route model / IO tests', 'route-model-harness.mjs');
 const roughRouteLogPassed = run('Rough-route correction-log tests', 'rough-route-log-harness.mjs');
+const reviewLogPassed = run('Plan-review flag tests', 'review-log-harness.mjs');
 const corridorPassed = run('Corridor / along-route cost tests', 'corridor-harness.mjs');
 const providedRoutePassed = run('Provided-route seam tests', 'provided-route-harness.mjs');
 const windPassed = run('Wind interpolation tests', 'wind-interpolation-harness.mjs');

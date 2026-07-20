@@ -145,6 +145,14 @@ function render() {
       keyboard: false
     });
     marker.on('click', (e) => L.DomEvent.stopPropagation(e));
+    // Right-click a waypoint to delete it (suppress the browser menu). Mirrors
+    // the panel's ✕, but where the skipper is already looking — on the chart.
+    marker.on('contextmenu', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (e.originalEvent) L.DomEvent.preventDefault(e.originalEvent);
+      if (!enabled) return;
+      removeById(wp.id);
+    });
     marker.on('drag', () => {
       const ll = marker.getLatLng();
       wp.lat = ll.lat; wp.lon = ll.lng; // provisional; committed on dragend

@@ -409,25 +409,32 @@ cutting through land. **`router.js` expansion must pass BOTH `start` and `end`**
 destination was unreachable — stalled ~0.8NM off). Default coastal clearance is
 `0.25` NM (`ROUTING_DEFAULTS`, `DEFAULT_ROUTER_OPTS`).
 
-### Logging: two dev tools, no auto-save
+### Logging: three dev tools, no auto-save
 The old "POST a big passage JSON on every run to `logs/route-latest.json`" system
-is **gone** (`src/services/debug-log.js` deleted, `POST /debug-log` removed). Two
-dev-mode tools replace it, both **debug.html only**:
+is **gone** (`src/services/debug-log.js` deleted, `POST /debug-log` removed). Three
+dev-mode tools replace it, all **debug.html only**. The two file-writing ones share
+`src/services/dev-log.js` (`postDevLog(endpoint, {markdown, record})`, download
+fallback) and a single server factory `devLogHandler(subdir, jsonl)` that writes a
+readable `<ts>.md` per entry and appends the record to a JSONL dataset:
 - **Download passage log** (`src/ui/passage-log-button.js`): assembles the full
   sailing-pass JSON on demand from `renderState.lastRun` (stashed by
   `passage-run.js`) via the still-pure `src/core/route-log.js`, and downloads it.
   Produced only when asked, not on every run.
-- **Rough-route log** (the correction tool, `src/ui/rough-route-lab.js`): generate
-  the app's rough route, edit it, say why, Save. `src/core/rough-route-log.js`
-  (pure) diffs baseline vs edited route + reads the route's own edit `history`,
-  emitting `{ markdown, record }`. `src/services/rough-route-log.js` POSTs to
-  `POST /rough-route-log`, which writes a readable `logs/rough-route/<ts>.md` and
-  **appends** the record to `logs/rough-route-corrections.jsonl` — a growing
-  corpus for hardening `computeRoughRoute`. Falls back to a browser download on
-  the static deploy. **Read the `.md` files / `.jsonl` to see where the generator
-  is wrong.** `start.cmd` still runs `node server/index.js` so the server serves
-  the app AND receives these logs; its entry check uses
-  `pathToFileURL(process.argv[1])` so it listens on Windows.
+- **Rough-route log** — the generator got it wrong (`src/ui/rough-route-lab.js`):
+  generate the app's rough route, edit it, say why, Save. `src/core/rough-route-log.js`
+  (pure) diffs baseline vs edited route + reads the route's own edit `history`.
+  `POST /rough-route-log` → `logs/rough-route/<ts>.md` + `rough-route-corrections.jsonl`
+  — a corpus for hardening `computeRoughRoute`.
+- **Flag plan for review** — the plan came out wrong, e.g. sailed over land
+  (`src/ui/review-flag.js`): captures the drawn rough route + the sailing plan it
+  produced + a note. `src/core/review-log.js` (pure) wraps the passage log.
+  `POST /review-log` → `logs/review/<ts>.md` + `review-flags.jsonl` — failing
+  cases to turn into regression fixtures.
+
+**Read the `.md` files / `.jsonl` to see where the planner is wrong.** `start.cmd`
+still runs `node server/index.js` so the server serves the app AND receives these
+logs; its entry check uses `pathToFileURL(process.argv[1])` so it listens on
+Windows.
 
 ### Wind field interpolation (`src/core/wind-interpolation.js`)
 The forecast is a **4x4 lattice** (`samplePoints(area, 4)` in `services/wind.js`)

@@ -23,7 +23,7 @@ export const LAYER_DEFS = [
     description: 'Buoys, lights, depth contours and traffic-separation marks from OpenSeaMap — the chart detail for judging clearance while you draw the course.',
     group: 'Charts',
     swatch: SEAMARK_SWATCH,
-    defaultOn: false,
+    defaultOn: true,
     userVisible: true,
     dependsOn: [],
     build: buildSeamarks
