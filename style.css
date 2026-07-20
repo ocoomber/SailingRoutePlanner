@@ -441,6 +441,15 @@ body {
 }
 
 .dev-log-actions { margin-top: 0.6rem; }
+.dev-log-title {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--color-muted); margin: 0 0 0.4rem;
+  border-top: 1px solid var(--color-border); padding-top: 0.5rem;
+}
+.dev-log-hint {
+  font-size: 0.68rem; color: var(--color-muted); line-height: 1.35;
+  margin: 0.25rem 0 0.7rem;
+}
 
 .rrlab-readout {
   font-size: 0.72rem; color: var(--color-muted);

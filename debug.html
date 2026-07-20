@@ -118,10 +118,15 @@
           <div id="passage-warnings" class="passage-warnings hidden"></div>
           <div id="trail-content"></div>
           <div class="dev-log-actions">
-            <button id="download-passage-log" class="route-action" title="Download the full sailing-pass diagnostics for the last plan">Download passage log</button>
-            <label class="rrlab-reason-label" for="review-note">Flag this rough-route + plan for review</label>
-            <textarea id="review-note" class="rrlab-reason" rows="2" placeholder="Why is this plan wrong? e.g. the sailing plan sailed over land between the Manacles and Black Head"></textarea>
-            <button id="flag-review" class="route-action" title="Save the rough route, the plan it produced, and your note for review">Flag plan for review</button>
+            <h3 class="dev-log-title">Developer diagnostics</h3>
+
+            <button id="download-passage-log" class="route-action" title="Download the last plan's full leg-by-leg JSON to this machine">Download raw plan JSON</button>
+            <p class="dev-log-hint">The last plan's full technical dump (every leg's wind, tack &amp; sail config) downloaded to your machine — for reading the numbers now. No note, nothing saved server-side.</p>
+
+            <label class="rrlab-reason-label" for="review-note">Flag a wrong plan for review</label>
+            <textarea id="review-note" class="rrlab-reason" rows="2" placeholder="What's wrong with this plan? e.g. the plan sailed over land between the Manacles and Black Head"></textarea>
+            <button id="flag-review" class="route-action" title="Save the rough route you drew, the plan it produced, and your note to the review dataset">Flag plan for review</button>
+            <p class="dev-log-hint">Saves the rough route you drew <em>plus</em> the plan it produced <em>plus</em> your note to the server's review dataset — for capturing a broken plan so it can be fixed later.</p>
             <p id="review-status" class="rrlab-status"></p>
           </div>
         </div>
