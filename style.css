@@ -647,3 +647,69 @@ body {
      doesn't eat the bottom of the map. */
   .inspector-bar { display: none; }
 }
+
+/* ---------- weather timeline ---------- */
+
+.weather-timeline {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0.6rem;
+  z-index: var(--z-panel);
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: min(34rem, calc(100% - 4rem));
+  padding: 0.4rem 0.7rem;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+}
+
+/* Dev pages show the inspector bar in this spot; stack above it. */
+body[data-mode="dev"] .weather-timeline { bottom: 2.6rem; }
+
+.wt-play,
+.wt-speed {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.3rem 0.45rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+.wt-play:hover,
+.wt-speed:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.wt-play { min-width: 1.9rem; }
+.wt-speed { min-width: 2.2rem; font-variant-numeric: tabular-nums; }
+
+.wt-track { position: relative; flex: 1; display: flex; align-items: center; }
+.wt-slider { width: 100%; accent-color: var(--color-primary); cursor: pointer; }
+
+.wt-depart-tick {
+  position: absolute;
+  top: -0.15rem;
+  width: 2px;
+  height: 1.3rem;
+  background: var(--color-danger);
+  pointer-events: none;
+}
+
+.wt-label {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  white-space: nowrap;
+  min-width: 5.2rem;
+  text-align: right;
+}
+
+/* Weather canvases must never intercept map interaction. */
+.weather-canvas { pointer-events: none; }
+
+@media (max-width: 640px) {
+  .weather-timeline { width: calc(100% - 1.2rem); bottom: 0.5rem; }
+  .wt-label { min-width: 4.6rem; }
+}

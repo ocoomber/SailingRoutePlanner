@@ -35,6 +35,8 @@ import { download } from './download.js';
 import { initRoughRouteLab, refreshRoughRouteDiff } from './rough-route-lab.js';
 import { initPassageLogButton } from './passage-log-button.js';
 import { initReviewFlag } from './review-flag.js';
+import { initTimeline } from './weather/timeline.js';
+import '../services/weather-service.js';   // wires weather fetching to the layer toggles
 
 let editor = null;
 
@@ -191,6 +193,7 @@ async function init() {
 
   setupTimeModeToggle();
   setDefaultDateTime();
+  initTimeline();
 
   document.getElementById('calculate-btn').addEventListener('click', onCreateSailingPlan);
   document.getElementById('clear-btn').addEventListener('click', onClearPlan);

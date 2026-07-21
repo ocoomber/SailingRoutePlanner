@@ -13,7 +13,7 @@
     <header class="command-bar">
       <div class="command-brand">
         <strong>Passage Planner</strong>
-        <span class="build-number">Build 53 — 2026-07-20 13:56 UTC</span>
+        <span class="build-number">Build 54 — 2026-07-21 15:52 UTC</span>
       </div>
 
       <div class="command-group">
@@ -40,6 +40,18 @@
          panel would also reach Leaflet and move the start/end marker. -->
     <main class="map-stage">
       <div id="map"></div>
+
+      <!-- Weather timeline: appears when a weather layer is on and forecast
+           data has loaded. Drives the animated wind/isobar overlays. -->
+      <div class="weather-timeline hidden" id="weather-timeline">
+        <button type="button" class="wt-play" title="Play / pause the forecast">▶</button>
+        <div class="wt-track">
+          <input type="range" class="wt-slider" aria-label="Forecast time">
+          <span class="wt-depart-tick hidden"></span>
+        </div>
+        <span class="wt-label"></span>
+        <button type="button" class="wt-speed" title="Playback speed">1×</button>
+      </div>
 
       <aside class="floating-panel panel-route" id="route-panel">
         <div class="panel-head">

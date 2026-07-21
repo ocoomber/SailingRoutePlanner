@@ -10,7 +10,9 @@ import {
 } from './layers/land-layers.js';
 import { buildTileGrid, buildTileStates } from './layers/tile-layers.js';
 import { buildRouteLegs, applyRouteSelection, buildManeuverMarkers, buildWaypoints } from './layers/route-layers.js';
-import { buildWindArrows } from './layers/wind-layers.js';
+import { buildWindHeatmap, colormapLegend } from './layers/wind-heatmap.js';
+import { buildWindBarbs } from './layers/wind-barbs.js';
+import { buildIsobars } from './layers/isobar-layer.js';
 import { buildTwaLabels } from './layers/sailing-layers.js';
 import { buildLandDeviationMarkers, buildConfigDecisionMarkers } from './layers/decision-layers.js';
 import { buildSeamarks, SEAMARK_SWATCH } from './layers/chart-layers.js';
@@ -27,6 +29,39 @@ export const LAYER_DEFS = [
     userVisible: true,
     dependsOn: [],
     build: buildSeamarks
+  },
+  {
+    id: 'wind-heatmap',
+    label: 'Wind speed',
+    description: 'Forecast wind strength as a colour wash over the whole chart — scrub the timeline below the map to watch it evolve. Blues are gentle, greens moderate, ambers and reds mean reef or stay put.',
+    group: 'Weather',
+    swatch: colormapLegend(),
+    defaultOn: true,
+    userVisible: true,
+    dependsOn: ['weatherGrid'],
+    build: buildWindHeatmap
+  },
+  {
+    id: 'wind-barbs',
+    label: 'Wind barbs',
+    description: 'Standard meteorological barbs showing direction and speed: half barb 5 kn, full barb 10 kn, pennant 50 kn. The feathers sit on the side the wind comes from.',
+    group: 'Weather',
+    swatch: '#1f2937',
+    defaultOn: true,
+    userVisible: true,
+    dependsOn: ['weatherGrid'],
+    build: buildWindBarbs
+  },
+  {
+    id: 'isobars',
+    label: 'Isobars',
+    description: 'Lines of equal sea-level pressure, labelled in hPa. Tightly packed isobars mean strong wind; watch lows track through as you play the timeline.',
+    group: 'Weather',
+    swatch: '#374151',
+    defaultOn: false,
+    userVisible: true,
+    dependsOn: ['weatherGrid'],
+    build: buildIsobars
   },
   {
     id: 'fine-land',
@@ -120,17 +155,6 @@ export const LAYER_DEFS = [
     defaultOn: false,
     dependsOn: ['legs'],
     build: buildWaypoints
-  },
-  {
-    id: 'wind-arrows',
-    label: 'Wind arrows',
-    description: 'Forecast wind on each leg, drawn pointing the way the wind is blowing.',
-    group: 'Route',
-    swatch: '#6b21a8',
-    defaultOn: true,
-    userVisible: true,
-    dependsOn: ['legs'],
-    build: buildWindArrows
   },
   {
     id: 'twa-labels',
