@@ -3,6 +3,7 @@
 import { inAnyPolygon } from '../core/coastline.js';
 import { renderState, getCoastlineManager, redraw } from './app-state.js';
 import { updateInspector } from './inspector.js';
+import { ensureWeatherFor } from '../services/weather-service.js';
 
 let viewportLoading = false;
 let viewportPending = null;
@@ -20,6 +21,7 @@ function updateTileStats() {
 
 export async function onViewportChanged(bounds) {
   renderState.bounds = bounds;
+  ensureWeatherFor(bounds);   // self-debounced; no-op unless a weather layer is on
   const manager = getCoastlineManager();
   if (!manager) { redraw(); return; }
 
