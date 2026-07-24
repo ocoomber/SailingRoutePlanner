@@ -611,8 +611,9 @@ body {
   .panel-head { padding: 0.6rem 0.8rem; }
   .panel-collapse { font-size: 1.4rem; padding: 0 0.5rem; }
 
-  /* Edge tabs: vertical labels protruding from each side, clear of the map's
-     zoom (top-left) and charting (top-right) controls. */
+  /* Edge tabs: vertical labels protruding from each side, grouped around the
+     vertical center so they clear the map's zoom (top-left) and charting
+     (top-right) controls at any viewport height. */
   .panel-fab {
     display: inline-block;
     position: fixed;
@@ -630,10 +631,18 @@ body {
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
-  .fab-route  { left: 0; top: 22%; border-radius: 0 var(--radius) var(--radius) 0; }
-  .fab-layers { left: 0; top: 52%; border-radius: 0 var(--radius) var(--radius) 0; }
-  .fab-trail  { right: 0; top: 22%; border-radius: var(--radius) 0 0 var(--radius); }
-  .fab-rrlab  { right: 0; top: 62%; border-radius: var(--radius) 0 0 var(--radius); }
+  .fab-route  { left: 0; top: calc(50% - 4rem); border-radius: 0 var(--radius) var(--radius) 0; }
+  .fab-layers { left: 0; top: calc(50% + 0.5rem); border-radius: 0 var(--radius) var(--radius) 0; }
+  .fab-trail  { right: 0; top: calc(50% - 4rem); border-radius: var(--radius) 0 0 var(--radius); }
+  .fab-rrlab  { right: 0; top: calc(50% + 0.5rem); border-radius: var(--radius) 0 0 var(--radius); }
+
+  /* While a drawer is open, hide the same-side tabs so they don't sit on top
+     of the drawer's own content (waypoint numbers, layer toggles, etc.). The
+     opposite-edge tab stays visible so panels can still be switched. */
+  #view-map.drawer-left-open .fab-route,
+  #view-map.drawer-left-open .fab-layers { display: none; }
+  #view-map.drawer-right-open .fab-trail,
+  #view-map.drawer-right-open .fab-rrlab { display: none; }
 
   .panel-backdrop {
     position: fixed;

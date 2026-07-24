@@ -7,20 +7,29 @@ import { refreshMapSize } from './map/map-core.js';
 
 const isMobile = () => window.matchMedia('(max-width: 640px)').matches;
 
+const LEFT_PANELS = new Set(['route-panel', 'layers-panel']);
+const RIGHT_PANELS = new Set(['trail-panel', 'rrlab-panel']);
+
 export function initPanels() {
   const panels = ['route-panel', 'layers-panel', 'trail-panel', 'rrlab-panel']
     .map(id => document.getElementById(id))
     .filter(Boolean);
   const backdrop = document.getElementById('panel-backdrop');
+  const viewMap = document.getElementById('view-map');
 
   function closeAll() {
     for (const p of panels) p.classList.remove('open');
     if (backdrop) backdrop.classList.remove('visible');
+    if (viewMap) viewMap.classList.remove('drawer-left-open', 'drawer-right-open');
   }
 
   function openPanel(panel) {
     for (const p of panels) p.classList.toggle('open', p === panel);
     if (backdrop) backdrop.classList.add('visible');
+    if (viewMap) {
+      viewMap.classList.toggle('drawer-left-open', LEFT_PANELS.has(panel.id));
+      viewMap.classList.toggle('drawer-right-open', RIGHT_PANELS.has(panel.id));
+    }
   }
 
   // Edge tabs open their drawer (mobile only — hidden on desktop).
