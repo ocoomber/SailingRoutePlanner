@@ -697,21 +697,23 @@ body[data-mode="dev"] .weather-timeline { bottom: 2.6rem; }
 .wt-track { position: relative; flex: 1; display: flex; align-items: center; }
 .wt-slider { width: 100%; accent-color: var(--color-primary); cursor: pointer; }
 
-.wt-depart-tick {
+.wt-depart-tick,
+.wt-now-tick {
   position: absolute;
   top: -0.15rem;
   width: 2px;
   height: 1.3rem;
-  background: var(--color-danger);
   pointer-events: none;
 }
+.wt-depart-tick { background: var(--color-danger); }
+.wt-now-tick { background: var(--color-primary); }
 
 .wt-label {
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
   white-space: nowrap;
-  min-width: 5.2rem;
+  min-width: 7.6rem;
   text-align: right;
 }
 
@@ -720,5 +722,5 @@ body[data-mode="dev"] .weather-timeline { bottom: 2.6rem; }
 
 @media (max-width: 640px) {
   .weather-timeline { width: calc(100% - 1.2rem); bottom: 0.5rem; }
-  .wt-label { min-width: 4.6rem; }
+  .wt-label { min-width: 6.8rem; }
 }
