@@ -32,10 +32,11 @@ body {
   color: var(--color-text);
   line-height: 1.5;
   height: 100vh;
+  height: 100dvh;   /* real visible height on mobile — 100vh sits below the address bar */
   overflow: hidden;
 }
 
-.view { height: 100vh; display: flex; flex-direction: column; }
+.view { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
 .hidden { display: none !important; }
 .hint { font-size: 0.7rem; color: var(--color-muted); }
 
